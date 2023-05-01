@@ -34,22 +34,17 @@ import time
 import subprocess
 import sys
 import csv
-
 # Connect to AMBF and setup image subscriber
 import img_saver as ImgSaver
+
+# TODO: Clean up imports
+
+
+
 
 RATE_HZ = 120
 NEEDLE_RADIUS = 0.1018 / 10
 THETA_GRASP = np.radians(15)
-
-
-# # Run the subprocess
-# process = subprocess.Popen([sys.executable, 'test_needle_controller.py'],
-#                            stdout=subprocess.PIPE,
-#                            stderr=subprocess.STDOUT)
-# # Wait for the subprocess to finish
-# process.wait()
-
 
 
 def add_break(s):
@@ -335,15 +330,6 @@ class SceneInterface:
         self._task_3_setup_ready_sub = rospy.Subscriber('/CRTK/scene/task_3_setup/ready',
                                                         Empty, self.task_3_setup_ready_cb, queue_size=1)
 
-    # def set_needle_pose(self, pose):
-    #     # # Convert the pose to RigidBodyCmd
-    #     cmd = RigidBodyCmd()
-    #     cmd.header.frame_id = 'Needle' #Needle'  # Set the name of the rigid body
-    #     cmd.pose.position = pose.position
-    #     cmd.pose.orientation = pose.orientation
-    #
-    #     # Publish the RigidBodyCmd to the appropriate topic
-    #     self._Needle_pub.publish(cmd)
 
     def state_cb(self, msg, key):
         self._scene_object_poses[key] = msg
@@ -373,18 +359,21 @@ class WorldInterface:
 
 
 
-
-
 class RosAmbfCommChannel(object):
-    def __init__(self):
+    """ RosAmbfCommChannel:
+        Wrapper that provides a communication channel between
+        the surgical environment and tf-agents
+     """
+
+    def __init__(self):  # TODO: could use a clean up
         self.SM_STATE = "GOTO_NEEDLE"
         self.saver = ImgSaver.ImageSaver()
         # Create an instance of the client
         rospy.init_node('RosAmbfCC')
         time.sleep(0.5)
 
+        # Get world, for reset
         self.world_handle = WorldInterface()
-
         # Get a handle to PSM1
         self.psm1 = ARMInterface(ArmType.PSM1)
         # Get a handle  to PSM2
@@ -392,17 +381,7 @@ class RosAmbfCommChannel(object):
         # Get a handle to ECM
         self.ecm = ARMInterface(ArmType.ECM)
         # Get a handle to scene to access its elements, i.e. needle and entry / exit points
-        #self.simulation_manager = SimulationManager('RosAmbfCC') #SimulationManager('task_3_setup_test')
-        #self.simulation_manager = SimulationManager('RosAmbfCC')
         self.scene = SceneInterface()
-
-        # from surgical_robotics_challenge.launch_crtk_interface import SceneManager, Options
-        # options = Options()
-        # scene_manager = SceneManager(options)
-        # simulation_manager = scene_manager.simulation_manager
-
-        # Create an instance of task completion report with you team name
-        #task_report = TaskCompletionReport(team_name='MT_SDU_IBC')
         # Small sleep to let the handles initialize properly
         add_break(0.5)
 
@@ -428,7 +407,6 @@ class RosAmbfCommChannel(object):
         self.t_grasp_needle = pos_to_action(self.t_base_grasp @ Pose(position=[1, 0, 0.0045])) # TODO: try different offset in x [0.01],y
         self.t_tcp0_needletip = None
         self.t_base_tcp_desired = None
-
 
         self.current_action = self._get_psm2_ik()
         self._reached_frame_flag = False
@@ -456,18 +434,15 @@ class RosAmbfCommChannel(object):
         print(f'random seed set in wrapper: {seed}')
         random.seed(seed)
 
-
     def set_random_needle(self):
         # Look up the pose of the needle grasp location relative to the base link of the surgical arm
         t_base_grasp = self.tf_buffer.lookup_pose('psm2/baselink', 'Needle/Grasp')
 
         # Move the surgical arm to a position above the grasp location
-        #self.psm2.set_jaw_angle(np.pi / 4)
         self.move_jaw('psm2', np.pi / 4)
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0, 0, -0.01]))  # above grasp
 
         # Move the surgical arm to a position at the grasp location, but slightly lower
-        #self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0.0, 0.0, 0.0045]))  # 0.005  # grasp pose, but lower
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0.0, 0.0, 0.006]))
         rospy.sleep(2.5)
 
@@ -476,7 +451,7 @@ class RosAmbfCommChannel(object):
         # Move the surgical arm to a position above the grasp location
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0, 0, -0.01]))
 
-        # Move to random offset and drop needle
+        # Move to random offset and drop needle # TODO: Make a switchcase for domain set
         #randx, randy = [random.uniform(-0.08, 0.001), random.uniform(0, 0.055)] # Full range
         #randx, randy = [random.uniform(-0.08, 0.001), random.uniform(0, 0.02)] # Only right side
 
@@ -491,98 +466,7 @@ class RosAmbfCommChannel(object):
         self.move_jaw('psm2', 1.)
         rospy.sleep(0.5)
 
-        # needle_pose = self.scene.measured_cp(SceneObjectType.Needle)
-        # needle_pose = [-0.0207886, 0.056196 + 0.002, 0.0711725]
-        #
-        # target_pose = PyKDL.Frame(
-        #             PyKDL.Rotation.Quaternion(0, 0, 0, 1),
-        #             PyKDL.Vector(needle_pose[0], needle_pose[1], needle_pose[2])
-        #         )
-        # msg = frame_to_pose_stamped_msg(target_pose)
-        #
-        # #self.scene.set_needle_pose(needle_pose.pose)
-        # self.scene.set_needle_pose(msg.pose)
 
-        # # Run the subprocess
-        # process = subprocess.Popen([sys.executable, 'test_needle_controller.py'],
-        #                            stdout=subprocess.PIPE,
-        #                            stderr=subprocess.STDOUT)
-        # # Wait for the subprocess to finish
-        # process.wait()
-        #time.sleep(5.0)
-
-        # needle_obj = self.sceneM.simulation_manager.get_obj_handle("Needle")
-        # needle_obj = self.scene.simulation_manager.get_obj_handle("Needle")
-        # needle_pose = needle_obj.get_pose()
-        # # print(f'found needle object: {needle_pose}')
-        # # print(f'needle elements: {needle_pose.p}, {needle_pose.M}')
-        # #
-        # needle_pose.p[0] = -0.0207886
-        # needle_pose.p[1] = 0.056196
-        # needle_pose.p[2] = 0.0711725
-        #
-        # target_pose = PyKDL.Frame(
-        #             PyKDL.Rotation.Quaternion(0, 0, 0, 0),
-        #             PyKDL.Vector(needle_pose.p[0], needle_pose.p[1], needle_pose.p[2])
-        #         )
-        #
-        # needle_obj.set_pose(pose=target_pose)
-        # time.sleep(3.0)
-
-        #
-        # # x upper: -0.025, lower:-0.001
-        # # y upper:-0.02, lower: 0.056196
-        # target = [random.uniform(-0.025, -0.001), random.uniform(-0.02, 0.056196), 0.0711725]
-        #
-        # for i in range(0, 100):
-        #     delta = [target[0] - needle_pose.p[0], target[1] - needle_pose.p[1], target[2] - needle_pose.p[2]]
-        #     print(f'delta: {delta}')
-        #
-        #     if abs(sum(delta)) <= 0.0001:
-        #         print("Done moving needle")
-        #         break
-        #
-        #     needle_pose.p[0] += max(-0.001, min(delta[0], 0.001))
-        #     needle_pose.p[1] += max(-0.001, min(delta[1], 0.001))
-        #     needle_pose.p[2] += max(-0.001, min(delta[2], 0.001))
-        #
-        #     target_pose = PyKDL.Frame(
-        #         PyKDL.Rotation.Quaternion(0, 0, 0, 0),
-        #         PyKDL.Vector(needle_pose.p[0], needle_pose.p[1], needle_pose.p[2])
-        #     )
-        #
-        #     needle_obj.set_pose(pose=target_pose)
-        #     time.sleep(0.1)
-        #
-        # needle_obj.set_force(Vector(0, 0, 0))
-        # needle_obj.set_torque(Vector(0, 0, 0))
-
-        # _client = Client('ambf_surgical_sim_crtk_node')
-        # _client.connect()
-        #
-        # needle_obj = _client.get_obj_handle("Needle")
-        #
-        # pos = [-0.20697696629671555, 0.5583796718976854, 0.7247253773270505]
-        # rpy = [0.030316076843698688, 0.029994417468907717, 0.036854178797618514]
-        # needle_obj.set_pos(*pos)
-        # needle_obj.set_rpy(*rpy)
-        #
-        # time.sleep(1)
-        #
-        # pos = [-0.20697696629671555, 0.0563796718976854, 0.7247253773270505]
-        # rpy = [0.030316076843698688, 0.029994417468907717, 0.036854178797618514]
-        # needle_obj.set_pos(*pos)
-        # needle_obj.set_rpy(*rpy)
-        # time.sleep(5)
-        #
-        # needle_obj.set_force(0, 0, 0)
-        # needle_obj.set_torque(0, 0, 0)
-
-        #needle = self.scene.measured_cp(SceneObjectType.Needle)
-        #print(needle)
-
-
-        #time.sleep(5.0)
 
 
     def set_random_psm(self):  # TODO: Implement random psm init
@@ -591,22 +475,7 @@ class RosAmbfCommChannel(object):
     def Average(self, lst):
         return sum(lst) / len(lst)
     def _update_metrics(self):
-        # Needle pose
-        # needle = self.scene.measured_cp(SceneObjectType.Needle).pose
-        # pos_needle = [needle.position.x, needle.position.y, needle.position.z, needle.orientation.x,
-        #               needle.orientation.y, needle.orientation.z, needle.orientation.w]
-        # # Get target entry point
-        # pos_entry_target = self.pos_entry
-        #print(f'needle dist: {pos_needle[:3]} -> {pos_entry_target[:3]}')
-        #delta = np.array(pos_needle[:3], dtype=np.float32) - np.array(pos_entry_target[:3], dtype=np.float32)
-
-        # This metrics doesn't work
-        # Optimal_action = self.get_Oracle_action()
-        # Optimal_action_error = np.array(Optimal_action, dtype=np.float32) - np.array(self.current_action, dtype=np.float32)
-        # Optimal_action_error_norm = np.linalg.norm(Optimal_action_error)
-        # self.accumulated_optimal_action_error_norm += Optimal_action_error_norm
-
-        # Needle pose
+        """ Calculates the needle entry distance """
         needle = self.scene.measured_cp(SceneObjectType.Needle).pose
         pos_needle = [needle.position.x, needle.position.y, needle.position.z, needle.orientation.x, needle.orientation.y, needle.orientation.z, needle.orientation.w]
         target_frame = []
@@ -622,32 +491,19 @@ class RosAmbfCommChannel(object):
         delta = np.array(target_frame, dtype=np.float32) - np.array(pos_needle, dtype=np.float32)
         self.needle_entry_dist = np.linalg.norm(delta[:3])
 
-        # Calculate needle_entry_dist metric
-        # Needle_to_Entry = self.tf_buffer.lookup_pose('Needle', self.entry_target_string)
-        # Needle_to_Entry = pos_to_action(Needle_to_Entry)
-        # _needle_entry_dist = abs(np.linalg.norm(Needle_to_Entry[:3]))
-        #
-        # if _needle_entry_dist < self.needle_entry_dist:
-        #     #print(f'New best Needle Entry dist: {needle_entry_dist}')
-        #     self.needle_entry_dist = _needle_entry_dist
-        # #else:
-        #     #print(f'old best Needle Entry dist: {needle_entry_dist}')
-
+        """ Calculates the PSM2 to Needle distance """
         psm2_to_Needle = self.tf_buffer.lookup_pose('psm2/toolyawlink', 'Needle/Grasp')
         psm2_to_Needle = pos_to_action(psm2_to_Needle)
-        #print(f'psm2_to_Needle, {psm2_to_Needle}')
-        #delta = np.array(pos_needle[:3], dtype=np.float32) - np.array(pos_psm2[:3], dtype=np.float32)
 
         _psm2_to_Needle = np.linalg.norm(psm2_to_Needle[:3])
-        if _psm2_to_Needle <= 0.009 and self._psm2_angle == 0: # _psm2_to_Needle <= 0.015:
+        if _psm2_to_Needle <= 0.009 and self._psm2_angle == 0:
             self.needle_is_grasp = True
             self.grasp_steps += 1
         else:
             self.needle_is_grasp = False
             self.grasp_steps = 0
-        #print(f'needle_entry_dist, {needle_entry_dist}')
-        #self.needle_is_grasp
 
+        """" Calculates the averages of the metrics """
         self._average_psm_needle_dist.append(_psm2_to_Needle)
         self._average_needle_entry_dist.append(self.needle_entry_dist)
 
@@ -661,7 +517,6 @@ class RosAmbfCommChannel(object):
 
     def _get_psm2_ik(self):
         pos_psm2 = self.psm2.measured_jp().pose
-
         current_state = PyKDL.Frame(
             PyKDL.Rotation.Quaternion(pos_psm2.orientation.x, pos_psm2.orientation.y, pos_psm2.orientation.z,
                                       pos_psm2.orientation.w),
@@ -670,22 +525,14 @@ class RosAmbfCommChannel(object):
         return current_state_js
 
     def _set_reached_frame(self, target_state_js, current_state_js):
-
         delta = np.array(target_state_js, dtype=np.float32) - np.array(current_state_js, dtype=np.float32)
         delta_norm = np.linalg.norm(delta)
-        # if delta_norm <= 0.0035 or (self.SM_STATE == "NEEDLE_INSERTION" and delta_norm <= 0.03): #TODO: 0.0035 Threshold value that works with the float32 truncation, needs update
-        #     self._reached_frame_flag = True
-        # else:
-        #     self._reached_frame_flag = False
 
         if abs(delta_norm - self.prev_delta_norm) <= 0.0001:
             self._reached_frame_flag = True
-            #print(f'Frame Reached with target Error: {self.prev_delta_norm}, diff error: {abs(delta_norm - self.prev_delta_norm)}')
         else:
             self._reached_frame_flag = False
-        #print(f'target_state_js {target_state_js}  current_state_js {current_state_js}  delta_norm {delta_norm}, diff error: {abs(delta_norm - self.prev_delta_norm)}')
         self.prev_delta_norm = delta_norm
-
 
     def internal_action(self, action):
         # Performs linear interpolation from current position to Oracle target position
@@ -693,8 +540,7 @@ class RosAmbfCommChannel(object):
         target_state_js = psm_ik.compute_IK(action)
 
         # Compute the step size
-        step_size = 0.05 #0.05 #0.05  # You can adjust this value to change the step size
-        #print(f'np arrays:  current_state_js: {np.array(target_state_js, dtype=np.float32)},   target_state_js: {np.array(current_state_js, dtype=np.float32)},  test: {np.array([0.123456789], dtype=np.float32)}')
+        step_size = 0.05
         delta = np.array(target_state_js, dtype=np.float32) - np.array(current_state_js, dtype=np.float32)
         delta_norm = np.linalg.norm(delta)
         if delta_norm > step_size:  #TODO: Not sure this logic is correct, check
@@ -703,12 +549,8 @@ class RosAmbfCommChannel(object):
            step = delta
 
         next_action = np.array(current_state_js, dtype=np.float32) + step
-        #print(f'delta_norm,  {delta_norm},  {step}')
         self.psm2.servo_jp(next_action)
-        #time.sleep(0.1) # 10 Hz control signal
         rospy.sleep(0.05)  # 20 Hz control signal
-        #time.sleep(0.03)  # ? Hz control signal
-        #time.sleep(0.01)  # 100 Hz control signal
 
         # Update the reached flag
         current_state_js = self._get_psm2_ik()
@@ -744,31 +586,18 @@ class RosAmbfCommChannel(object):
         elif STATE == "NEEDLE_INSERTION":
             action = convert_pose_to_action(self.t_base_tcp_desired, 0)
         elif STATE == "DONE":
-            action = convert_pose_to_action(self.t_base_tcp_desired, 0)#TODO: use finished status to tell set env done
-            #Finished just wait
+            action = convert_pose_to_action(self.t_base_tcp_desired, 0)
 
-        #print(f'_set_action: {action}')
         self.current_action = action
 
-
     def _update_states(self, reached_frame, verbose=0):
-
-        if self.SM_STATE == "GRASP_NEEDLE_2":
-            # After it tries to grasp we consider this an attempt
-            self.pickup_attempts += 1
-        if self.SM_STATE == "GOTO_ENTRY":
-            # Reset if it was able to pick up needle
-            self.pickup_attempts = 0
-
 
         # Compute the next state
         if self.SM_STATE == "GOTO_NEEDLE" and reached_frame:
             self.SM_STATE = "GRASP_NEEDLE_1"
             self.t_base_grasp = self.tf_buffer.lookup_pose('psm2/baselink', 'Needle/Grasp')
             self.t_above_needle = pos_to_action(self.t_base_grasp @ Pose(position=[0, 0, -0.01]))
-            #self.t_grasp_needle = pos_to_action(self.t_base_grasp @ Pose(position=[0, 0, 0.003 + (self.pickup_attempts * 0.0005)]))
             self.t_grasp_needle = pos_to_action(self.t_base_grasp @ Pose(position=[0.0, 0, 0.0045]))
-            #print(f'Attempt: {self.pickup_attempts}, trying with Z = {0.004 + (self.pickup_attempts * 0.0005)}')
 
         elif self.SM_STATE == "GRASP_NEEDLE_1" and reached_frame:
             self.SM_STATE = "GRASP_NEEDLE_2"
@@ -801,18 +630,9 @@ class RosAmbfCommChannel(object):
                 self.SM_STATE = "GOTO_NEEDLE"
 
         elif self.SM_STATE == "DONE":
-            #print(f'Debug waiting...')
-            #time.sleep(5) #debug stop
             self.done = False #True # TODO: set this to true to enable finish episode
             # if not self.done:
             #     self.SM_STATE = "GOTO_ENTRY"
-
-
-            # # Needle pose
-            # needle = self.scene.measured_cp(SceneObjectType.Needle).pose
-            # pos_needle = [needle.position.x, needle.position.y, needle.position.z, needle.orientation.x,
-            #                needle.orientation.y, needle.orientation.z, needle.orientation.w]
-            # print(f'Final Needle Position: {pos_needle}')
 
         if verbose >= 1:
             print(f"Reached target, next target: {self.SM_STATE}")
@@ -823,10 +643,6 @@ class RosAmbfCommChannel(object):
 
         # Based on the state set the high level action
         self._set_action()
-
-        # Get the current action
-        #self._get_action(self.current_action) # This might be redundent
-        #print(f'get_Oracle_action:   Action: {self.current_action}, state {self.SM_STATE}')
 
         if not self.Random_Needle_drop:
             self.Random_Needle_drop = False #True
@@ -852,7 +668,7 @@ class RosAmbfCommChannel(object):
         self.world_handle.reset()
         time.sleep(0.5)
 
-        # If the simulation is done, then dont move the needle
+        # If the simulation is done, then don't move the needle
         if not done:
             self.set_random_needle()
 
@@ -889,9 +705,7 @@ class RosAmbfCommChannel(object):
             Rotation.Quaternion(action[3], action[4], action[5], action[6]),
             Vector(action[0], action[1], action[2]),
         )
-        #self.move_to_frame('psm2',frame, 1)
         self.internal_action(frame)
-        #print(f'needle grasp status, {self.needle_is_grasp}')
 
         #if self.needle_entry_dist <= 0.0008 and self.needle_is_grasp: #TODO: Chould this be removed?
         #    self.done = True
@@ -967,12 +781,6 @@ class RosAmbfCommChannel(object):
             #self.done = True
         else:
             print(f'Task failed, needle_entry_dist: {self.needle_entry_dist}, needle_is_grasp: {self.needle_is_grasp}')
-
-        #if self.done:
-        #    print(f'Task Succesfully completed, needle_entry_dist: {self.needle_entry_dist}, needle_is_grasp: {self.needle_is_grasp}')
-        #     return 1
-        # else:
-        #     return 0
 
         reward = 0
         if self.needle_entry_dist <= 100:
