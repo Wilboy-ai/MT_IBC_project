@@ -14,6 +14,7 @@ import MT_Simple_AccelNet_env
 #from tf_agents.specs.tensor_spec import from_space
 import csv
 import random
+import time
 
 np.set_printoptions(precision=32)
 
@@ -62,12 +63,20 @@ class MT_SutureOracle(py_policy.PyPolicy):
 
 def create_episodes(dataset_path, num_episodes, index):
     """Create training data"""
-    env = suite_gym.load('SurgicalEnv-v2')
+
+    # Retry Loading environment logic
+    # It doesn't always connect to the launch_crtk_interface, so you have to retry, idk how to fix it..
+    for i in range(0, 10):
+        try:
+            env = suite_gym.load('SurgicalEnv-v2')
+            break
+        except Exception:
+            print(f'Failed to load SurgicalEnv-v2, will try again')
+            time.sleep(1)
+            continue
+
     policy = MT_SutureOracle(env)
     env.set_video_title(f'demo_{index}')
-
-    #TODO: Remove this as this is only a test!
-    #env.seed(12345)
 
     observers = []
     observers.append(example_encoding_dataset.TFRecordObserver(dataset_path, policy.collect_data_spec, py_mode=True,

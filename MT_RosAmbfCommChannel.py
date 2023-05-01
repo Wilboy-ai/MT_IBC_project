@@ -910,18 +910,17 @@ class RosAmbfCommChannel(object):
             self.psm2.servo_jp(joint_position)
         if verbose!=0:
             print(f'Setting the end-effector frame of {arm_name} w.r.t Base', joint_position)
+
     def move_jaw(self, arm_name, angle):
+        # Close the jaw of the surgical arm to grasp the needle
         if arm_name == "psm1":
-            # Close the jaw of the surgical arm to grasp the needle
-            if angle is not self._psm1_angle:
-                print(f'gripper interpolation, wait')
+            if angle != self._psm1_angle:
                 for i in np.linspace(self._psm1_angle, angle, num=20):
                     self.psm1.set_jaw_angle(i)
                     rospy.sleep(0.1)
             self._psm1_angle = angle
         if arm_name == "psm2":
-            if angle is not self._psm2_angle:
-                print(f'gripper interpolation, wait')
+            if angle != self._psm2_angle:
                 for i in np.linspace(self._psm2_angle, angle, num=20):
                     self.psm2.set_jaw_angle(i)
                     rospy.sleep(0.1)
