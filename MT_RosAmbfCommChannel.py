@@ -27,7 +27,6 @@ from surgical_robotics_challenge.simulation_manager import SimulationManager
 from ambf_msgs.msg import RigidBodyCmd, RigidBodyState
 from ambf_client import Client
 
-
 import collections
 from gym import spaces
 import time
@@ -38,8 +37,6 @@ import csv
 import img_saver as ImgSaver
 
 # TODO: Clean up imports
-
-
 
 
 RATE_HZ = 120
@@ -292,9 +289,6 @@ class SceneObjectType(Enum):
 
 class SceneInterface:
     def __init__(self):
-        #self.simulation_manager = SimulationManager("ambf_surgical_sim_crtk_node")
-        #self.simulation_manager = SimulationManager("RosAmbfCC")
-
         self._scene_object_poses = dict()
         self._scene_object_poses[SceneObjectType.Needle] = None
         self._scene_object_poses[SceneObjectType.Entry1] = None
@@ -427,6 +421,7 @@ class RosAmbfCommChannel(object):
         self.grasp_steps = 0
         self.pickup_attempts = 0
 
+        self.init_grasp = random.uniform(0.5, 1.0)
         self._psm1_angle = 1
         self._psm2_angle = 1
 
@@ -437,34 +432,31 @@ class RosAmbfCommChannel(object):
     def set_random_needle(self):
         # Look up the pose of the needle grasp location relative to the base link of the surgical arm
         t_base_grasp = self.tf_buffer.lookup_pose('psm2/baselink', 'Needle/Grasp')
-
         # Move the surgical arm to a position above the grasp location
         self.move_jaw('psm2', np.pi / 4)
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0, 0, -0.01]))  # above grasp
-
         # Move the surgical arm to a position at the grasp location, but slightly lower
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0.0, 0.0, 0.006]))
-        rospy.sleep(2.5)
-
         self.move_jaw('psm2', 0.0)
-        rospy.sleep(0.1)
         # Move the surgical arm to a position above the grasp location
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0, 0, -0.01]))
 
-        # Move to random offset and drop needle # TODO: Make a switchcase for domain set
-        #randx, randy = [random.uniform(-0.08, 0.001), random.uniform(0, 0.055)] # Full range
-        #randx, randy = [random.uniform(-0.08, 0.001), random.uniform(0, 0.02)] # Only right side
+        # Move to random offset and drop needle
+        domain_set = [[-0.035, 0.01],                                               # Domain 0: Fixed position
+                      [random.uniform(-0.04, -0.03), random.uniform(0, 0.02)],      # Domain 1: Small displacement
+                      [random.uniform(-0.06, -0.01), random.uniform(0, 0.02)],      # Domain 2: Medium displacement
+                      [random.uniform(-0.08, 0.001), random.uniform(0, 0.02)],      # Domain 3: Entire right side
+                      [random.uniform(-0.08, 0.001), random.uniform(0, 0.055)],     # Domain 4: Entire suture domain
+                      ]
 
-        #randx, randy = [-0.035, 0.01]  # stage 0 domain
-        #randx, randy = [random.uniform(-0.04, -0.03), random.uniform(0, 0.02)]  # stage 1 domain
-        randx, randy = [random.uniform(-0.06, -0.01), random.uniform(0, 0.02)]  # stage 1 domain
+        rx, ry = domain_set[3]
+        print(f'Random needle position: [{rx}, {ry}]')
 
-        #randx, randy = [-0.01, 0.02]  # bounds test
-        print(f'Random needle position: [{randx}, {randy}]')
-        self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[randx, randy, -0.01]))
-        rospy.sleep(1.0)
-        self.move_jaw('psm2', 1.)
-        rospy.sleep(0.5)
+        self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, -0.01]))
+        self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, 0.005]))
+        self.move_jaw('psm2', np.pi / 4)
+        self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, -0.01]))
+
 
 
 
@@ -573,9 +565,9 @@ class RosAmbfCommChannel(object):
         if STATE == "GOTO_NEEDLE":
             self.t_base_grasp = self.tf_buffer.lookup_pose('psm2/baselink', 'Needle/Grasp')
             self.t_above_needle = pos_to_action(self.t_base_grasp @ Pose(position=[0.0, 0, -0.01]))
-            action = convert_pose_to_action(self.t_above_needle, 1)
+            action = convert_pose_to_action(self.t_above_needle, self.init_grasp)
         elif STATE == "GRASP_NEEDLE_1":
-            action = convert_pose_to_action(self.t_grasp_needle, 1)
+            action = convert_pose_to_action(self.t_grasp_needle, self.init_grasp)
         elif STATE == "GRASP_NEEDLE_2":
             action = convert_pose_to_action(self.t_grasp_needle, 0)
         elif STATE == "ABOVE_NEEDLE":
@@ -691,6 +683,7 @@ class RosAmbfCommChannel(object):
         #self.accumulated_optimal_action_error_norm = 0
         self.grasp_steps = 0
         self.pickup_attempts = 0
+        self.init_grasp = random.uniform(0.5, 1.0)
 
         self._average_needle_entry_dist = []
         self._average_psm_needle_dist = []
