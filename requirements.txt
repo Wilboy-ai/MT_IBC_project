@@ -1,0 +1,6 @@
+gym
+matplotlib
+tf_agents
+tensorflow
+tqdm
+opencv-python
