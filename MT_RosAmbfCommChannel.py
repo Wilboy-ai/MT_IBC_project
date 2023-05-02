@@ -434,12 +434,17 @@ class RosAmbfCommChannel(object):
         t_base_grasp = self.tf_buffer.lookup_pose('psm2/baselink', 'Needle/Grasp')
         # Move the surgical arm to a position above the grasp location
         self.move_jaw('psm2', np.pi / 4)
+        rospy.sleep(0.1)
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0, 0, -0.01]))  # above grasp
+        rospy.sleep(0.1)
         # Move the surgical arm to a position at the grasp location, but slightly lower
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0.0, 0.0, 0.006]))
+        rospy.sleep(0.1)
         self.move_jaw('psm2', 0.0)
+        rospy.sleep(0.1)
         # Move the surgical arm to a position above the grasp location
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[0, 0, -0.01]))
+        rospy.sleep(0.1)
 
         # Move to random offset and drop needle
         domain_set = [[-0.035, 0.01],                                               # Domain 0: Fixed position
@@ -447,18 +452,20 @@ class RosAmbfCommChannel(object):
                       [random.uniform(-0.06, -0.01), random.uniform(0, 0.02)],      # Domain 2: Medium displacement
                       [random.uniform(-0.08, 0.001), random.uniform(0, 0.02)],      # Domain 3: Entire right side
                       [random.uniform(-0.08, 0.001), random.uniform(0, 0.055)],     # Domain 4: Entire suture domain
+                      [random.uniform(-0.06, 0.0), 0.01],                           # Domain 5: Right side Line (experimental)
                       ]
 
-        rx, ry = domain_set[3]
+        rx, ry = domain_set[0]
         print(f'Random needle position: [{rx}, {ry}]')
 
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, -0.01]))
+        rospy.sleep(0.1)
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, 0.005]))
+        rospy.sleep(0.1)
         self.move_jaw('psm2', np.pi / 4)
+        rospy.sleep(0.1)
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, -0.01]))
-
-
-
+        rospy.sleep(0.1)
 
 
     def set_random_psm(self):  # TODO: Implement random psm init
@@ -598,12 +605,12 @@ class RosAmbfCommChannel(object):
             if not self.needle_is_grasp:
                 self.SM_STATE = "GOTO_NEEDLE"
 
-
         elif self.SM_STATE == "ABOVE_NEEDLE" and reached_frame:
             self.t_tcp0_needletip = Pose.from_msg(self.psm2.msg_measured_cp.pose).inverse() @ self.tf_buffer.lookup_pose(
                 'psm2/baselink', 'Needle/Tip')
             self.t_base_tcp_desired = pos_to_action(
-                self.tf_buffer.lookup_pose('psm2/baselink', self.entry_target_string) @ Pose.from_axis_angle([1, 0, 0], -np.pi / 2) @ self.t_tcp0_needletip.inverse()) #TODO: pos_entry is a frame, shouldn be 'Entry#'
+                self.tf_buffer.lookup_pose('psm2/baselink', self.entry_target_string) @ Pose.from_axis_angle([1, 0, 0],
+                -np.pi / 2) @ self.t_tcp0_needletip.inverse())
             self.SM_STATE = "GOTO_ENTRY"
             if not self.needle_is_grasp:
                 self.SM_STATE = "GOTO_NEEDLE"
@@ -764,6 +771,7 @@ class RosAmbfCommChannel(object):
 
     def get_video_feed(self):
         # Stereo image from ecm
+        print(f'Added new frame')
         image = self.saver.get_frame()
         return image
 

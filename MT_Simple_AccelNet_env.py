@@ -42,6 +42,7 @@ class SurgicalEnv(gym.Env):
         self.optimal_action_error = 0
         self.done = False
         self._total_reward = 0
+        self.mode = "TRAIN"
 
 
         # Define the action space
@@ -88,10 +89,12 @@ class SurgicalEnv(gym.Env):
     def reset(self):
         print(f'Total reward: {self._total_reward}')
         print(f"Reset was called")
+        print(f'Running in mode: {self.mode}')
         # Reset the simulation and get the initial observation
         self.set_target_entry(random.choice([1, 2, 3, 4]))
         #self.set_target_entry(2)
         self.steps = 0
+
 
         self.needle_entry_dist = 999
         #self.optimal_action_error = 0
@@ -109,10 +112,9 @@ class SurgicalEnv(gym.Env):
         for _ in range(self.repeat_actions):
             self._comm_channel.send_action([px, py, pz, ox, oy, oz, ow])
             # This ensures that the gripper can only be open or closed
-            #thres_gripper = 1 if gripper_angle >= 0.5 else 0
-            #self._comm_channel.move_jaw('psm2', thres_gripper)
-            self._comm_channel.move_jaw('psm2', gripper_angle)
-
+            thres_gripper = np.pi/4 if gripper_angle >= 0.5 else 0
+            self._comm_channel.move_jaw('psm2', thres_gripper)
+            #self._comm_channel.move_jaw('psm2', gripper_angle)
         self._state = self._comm_channel.get_observation()
 
         state = self._state
@@ -121,7 +123,7 @@ class SurgicalEnv(gym.Env):
         self._total_reward += reward
         info = {}
 
-        if self._video:  # Add frame
+        if self._video:  # Add frame # TODO: Try and fix video framerate
             self._add_frame()
 
         # Create a video from frame buffer if done
@@ -152,9 +154,17 @@ class SurgicalEnv(gym.Env):
         image = self._comm_channel.get_video_feed()
         self._frames.append(image)
 
+
+    def set_mode_demo(self):
+        self.mode = "DEMO"
+
     def _create_video(self):
         now = datetime.datetime.now()
-        filename = f"Videos/SurgicalEnv_{self.video_title}_{now.strftime('%Y-%m-%d-%H-%M-%S')}.mp4"
+
+        filename = f"Videos/{self.video_title}_{now.strftime('%Y-%m-%d-%H-%M-%S')}.mp4"
+        if self.mode == "DEMO":
+            filename = f"Videos/{self.video_title}.mp4"
+
 
         # Define the codec and create a VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # choose a codec (e.g., H264, MP4V, etc.)

@@ -58,9 +58,11 @@ def training_step(bc_learner, fused_train_steps, train_step):
 def evaluation_step(eval_env, eval_actor, eval_episodes):
     """Runs evaluation routine in gym and returns metrics."""
     logging.info('Evaluation policy.')
+    custom_eval_seeds = [67, 29, 56, 182, 84, 94654, 549, 8423, 54, 80]
+
     with tf.name_scope('eval'):
         for eval_seed in range(eval_episodes):
-            eval_env.seed(eval_seed)
+            eval_env.seed(custom_eval_seeds[eval_seed])
             eval_actor.reset()
             eval_actor.run()
 
@@ -75,9 +77,8 @@ def train():
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = f'Sim_states_reduced_domain_stage_1_v3/'
-    dataset_path = 'MT_train_reduced_set_grasp_fix_stage_1/suture_throw_demo_*.tfrecord'
-    run_prefix = f'Sim_states_reduced_domain_stage_1_v3'
+    root_dir = f'IBC_TEST_LEVEL_0/'
+    dataset_path = 'LEVEL_0/suture_throw_demo_*.tfrecord'
 
     network_width = wandb.config.network_width
     batch_size = wandb.config.batch_size
@@ -175,7 +176,7 @@ def train():
     wandb_all_metrics = {}
 
     trainings_metrics = training_step(bc_learner, 50, train_step)
-    eval_env.set_video_title(f'{run_prefix}_50')
+    eval_env.set_video_title(f'Suture_eval_50')
     eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
     def update_wandb_all_metrics(_trainings_metrics, _eval_metrics):
@@ -205,8 +206,7 @@ def train():
             print(f'Training at step: {train_step.numpy()}/{num_iterations}')
 
             # Generate video of learned policy
-            #for i in range(0, 5):
-            eval_env.set_video_title(f'{run_prefix}_{train_step.numpy()}')
+            eval_env.set_video_title(f'Suture_eval_{train_step.numpy()}')
             eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
     summary_writer.flush()
@@ -215,14 +215,14 @@ def train():
 
 def main(_):
     # wandb project name
-    project_name = "Sim_states_pretrained"
+    project_name = "MT_IBC_PIPELINE"
 
     # Configurations
-    num_iterations = 100000             #random.choice([50000])
-    network_width = 256                 #random.choice([128, 256, 512])
-    batch_size = 256                    #random.choice([64, 128, 256])
-    num_counter_examples = 8            #random.choice([4, 6, 8, 10])
-    learning_rate = 1e-3                #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
+    num_iterations = 50000             #random.choice([50000])
+    network_width = 128                 #random.choice([128, 256, 512])
+    batch_size = 512                    #random.choice([64, 128, 256])
+    num_counter_examples = 4            #random.choice([4, 6, 8, 10])
+    learning_rate = 1e-4                #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
 
     # # start a new wandb run to track this script
     wandb.init(

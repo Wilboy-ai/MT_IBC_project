@@ -55,7 +55,8 @@ def create_episodes(dataset_path, num_episodes, index):
             continue
 
     policy = MT_SutureOracle(env)
-    env.set_video_title(f'demo_{index}')
+    env.set_video_title(f'Suture_demo_{index}')
+    env.set_mode_demo()
 
     observers = []
     observers.append(example_encoding_dataset.TFRecordObserver(dataset_path, policy.collect_data_spec, py_mode=True,
@@ -70,10 +71,9 @@ def create_episodes(dataset_path, num_episodes, index):
 
 def main(_):
     num_episodes = 1
-    for i in range(0, 1):
-        dataset_path = f'MT_train_data/suture_throw_demo_{i}.tfrecord'
+    for i in [10]: #range(32, 40):
+        dataset_path = f'LEVEL_0/suture_throw_demo_{i}.tfrecord'
         create_episodes(dataset_path, num_episodes, i)
 
 if __name__ == "__main__":
     multiprocessing.handle_main(functools.partial(app.run, main))
-
