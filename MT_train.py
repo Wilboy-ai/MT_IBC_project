@@ -77,9 +77,17 @@ def train():
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = f'IBC_LEVEL_3/'
+    root_dir = f'IBC_LEVEL_3-6/'
     dataset_path = 'LEVEL_3/suture_throw_demo_*.tfrecord'
 
+    # Make root folder
+    os.makedirs(root_dir)
+
+    # make video folder
+    save_video_path = f'{root_dir}Videos'
+    os.makedirs(save_video_path)
+
+    # Load in hyper-parameters from wandb config
     network_width = wandb.config.network_width
     batch_size = wandb.config.batch_size
     num_iterations = wandb.config.num_iterations
@@ -92,10 +100,6 @@ def train():
     eval_episodes = wandb.config.eval_episodes
     decay_steps = wandb.config.decay_steps
     decay_rate = wandb.config.decay_rate
-
-    #eval_episodes = 5                                           # Number of episodes for eval
-    #eval_interval = (num_iterations * eval_episodes) / 60       # 60 minutes eval time
-    #eval_interval = round(eval_interval / 100) * 100            # Round to the nearest 100ths
 
     # Load openai gym for evaluating the learned policy
     env_name = "SurgicalEnv-v2"
@@ -190,7 +194,7 @@ def train():
     wandb_all_metrics = {}
 
     trainings_metrics = training_step(bc_learner, 50, train_step)
-    eval_env.set_video_title(f'Suture_eval_50')
+    eval_env.set_video_title(f'{save_video_path}/Suture_eval_50')
     eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
     def update_wandb_all_metrics(_trainings_metrics, _eval_metrics):
@@ -220,7 +224,7 @@ def train():
             print(f'Training at step: {train_step.numpy()}/{num_iterations}')
 
             # Generate video of learned policy
-            eval_env.set_video_title(f'Suture_eval_{train_step.numpy()}')
+            eval_env.set_video_title(f'{save_video_path}/Suture_eval_{train_step.numpy()}')
             eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
     summary_writer.flush()
@@ -235,15 +239,15 @@ def main(_):
     num_iterations = 50000              #random.choice([50000])
     eval_interval = 5000
     eval_episodes = 4
-    network_width = 256                  #random.choice([128, 256, 512])
-    batch_size = 128                    #random.choice([64, 128, 256])
-    num_counter_examples = 4            #random.choice([4, 6, 8, 10])
-    learning_rate = 1e-6                #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
-    num_action_samples = 512
-    langevin_iteration = 150
-    langevin_stepsize = 1e-3            # Final langevin stepsizes
-    decay_steps = 80
-    decay_rate = 0.99
+    network_width = random.choice([128, 200, 256, 300, 512])
+    batch_size = random.choice([64, 80, 128, 150, 256])
+    num_counter_examples = random.choice([4, 6, 8, 10])
+    learning_rate = random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
+    num_action_samples = random.choice([64, 128, 256, 512, 1024])
+    langevin_iteration = random.choice([50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
+    langevin_stepsize = random.choice([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8])            # Final langevin stepsizes
+    decay_steps = random.choice([100, 200, 300, 400, 500])
+    decay_rate = random.choice([0.8, 0.95, 0.99]) #0.99
 
     # # start a new wandb run to track this script
     wandb.init(

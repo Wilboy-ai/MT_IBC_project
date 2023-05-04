@@ -162,9 +162,9 @@ class SurgicalEnv(gym.Env):
     def _create_video(self):
         now = datetime.datetime.now()
 
-        filename = f"Videos/{self.video_title}_{now.strftime('%Y-%m-%d-%H-%M-%S')}.mp4"
+        filename = f"{self.video_title}_{now.strftime('%Y-%m-%d-%H-%M-%S')}.mp4"
         if self.mode == "DEMO":
-            filename = f"Videos/{self.video_title}.mp4"
+            filename = f"{self.video_title}.mp4"
 
 
         # Define the codec and create a VideoWriter object
