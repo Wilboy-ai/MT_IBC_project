@@ -56,7 +56,8 @@ class SurgicalEnv(gym.Env):
             #psm1=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
             psm2=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
             needle=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
-            entry=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
+            #entry=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
+            entry=spaces.Box(low=1, high=4, shape=(1,), dtype=np.float32),
             #image=spaces.Box(low=0.0, high=1.0, shape=(64800,), dtype=np.float32) #777600 # stereo image
             #image=spaces.Box(low=0.0, high=255.0, shape=(68, 120, 3), dtype=np.float32) # Mono image pixelEBM
         )
@@ -91,8 +92,8 @@ class SurgicalEnv(gym.Env):
         print(f"Reset was called")
         print(f'Running in mode: {self.mode}')
         # Reset the simulation and get the initial observation
-        self.set_target_entry(random.choice([1, 2, 3, 4]))
-        #self.set_target_entry(2)
+        self.set_target_entry(random.choice([2, 3]))
+        #self.set_target_entry(3)
         self.steps = 0
 
 

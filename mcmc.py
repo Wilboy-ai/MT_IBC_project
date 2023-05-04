@@ -16,7 +16,6 @@ class PolynomialSchedule:
         """Get learning rate for index."""
         lr = ((self._init - self._final) *
          ((1 - (float(index) / float(self._num_steps - 1))) ** (self._power))) + self._final
-        print(f'MCMC learning rate: {lr}')
         #return ((self._init - self._final) *
         #        ((1 - (float(index) / float(self._num_steps - 1))) ** (self._power))) + self._final
         return lr
@@ -96,13 +95,14 @@ def langevin_step(energy_network, observations, actions, training, policy_state,
 
 @tf.function
 def langevin_actions_given_obs(energy_network, observations, action_samples, policy_state, min_actions, max_actions,
-                               num_iterations=100, training=False, tfa_step_type=(), stop_chain_grad=True,
+                               num_iterations=100, langevin_stepsize=1e-1, training=False, tfa_step_type=(), stop_chain_grad=True,
                                return_chain=False):
     """Given obs and actions, use dE(obs,act)/dact to perform Langevin MCMC."""
     stepsize = 1e-1
     actions = tf.identity(action_samples)
 
-    schedule = PolynomialSchedule(1e-1, 1e-5, 2.0, num_iterations)
+    #schedule = PolynomialSchedule(1e-1, 1e-5, 2.0, num_iterations) # TODO: look into this!
+    schedule = PolynomialSchedule(1e-1, langevin_stepsize, 2.0, num_iterations)
     b_times_n = tf.shape(action_samples)[0]
     act_dim = tf.shape(action_samples)[-1]
 

@@ -71,8 +71,8 @@ def create_episodes(dataset_path, num_episodes, index):
 
 def main(_):
     num_episodes = 1
-    for i in [10]: #range(32, 40):
-        dataset_path = f'LEVEL_0/suture_throw_demo_{i}.tfrecord'
+    for i in [19]: #range(0, 20):
+        dataset_path = f'LEVEL_3/suture_throw_demo_{i}.tfrecord'
         create_episodes(dataset_path, num_episodes, i)
 
 if __name__ == "__main__":

@@ -265,7 +265,6 @@ class ARMInterface:
     def step_control_loop(self, event):
         if not self.trajectory:
             return
-
         try:
             pos_joint_next = next(self.trajectory)[0]
             self.servo_jp(pos_joint_next)
@@ -310,20 +309,16 @@ class SceneInterface:
             self._subs.append(rospy.Subscriber(namespace + k.name + suffix, PoseStamped,
                                                self.state_cb, callback_args=k, queue_size=1))
 
-
-
         #topic = '/ambf/env/Needle/Command' #'/servo_cp'
         #/ambf/env/Needle/State
         self._Needle_pub = rospy.Publisher('/ambf/env/Needle/Command', RigidBodyCmd, queue_size=1)
         #self._Needle_pub = rospy.Publisher('/CRTK/Needle/measured_cp', PoseStamped, queue_size=1)
-
 
         self._task_3_ready = False
         self._task_3_setup_init_pub = rospy.Publisher('/CRTK/scene/task_3_setup/init', Empty, queue_size=1)
 
         self._task_3_setup_ready_sub = rospy.Subscriber('/CRTK/scene/task_3_setup/ready',
                                                         Empty, self.task_3_setup_ready_cb, queue_size=1)
-
 
     def state_cb(self, msg, key):
         self._scene_object_poses[key] = msg
@@ -425,6 +420,8 @@ class RosAmbfCommChannel(object):
         self._psm1_angle = 1
         self._psm2_angle = 1
 
+        self.pos_entry_target_number = 1
+
     def set_seed(self, seed=None):
         print(f'random seed set in wrapper: {seed}')
         random.seed(seed)
@@ -450,12 +447,12 @@ class RosAmbfCommChannel(object):
         domain_set = [[-0.035, 0.01],                                               # Domain 0: Fixed position
                       [random.uniform(-0.04, -0.03), random.uniform(0, 0.02)],      # Domain 1: Small displacement
                       [random.uniform(-0.06, -0.01), random.uniform(0, 0.02)],      # Domain 2: Medium displacement
-                      [random.uniform(-0.08, 0.001), random.uniform(0, 0.02)],      # Domain 3: Entire right side
+                      [random.uniform(-0.08, 0.001), random.uniform(0, 0.015)],      # Domain 3: Entire right side
                       [random.uniform(-0.08, 0.001), random.uniform(0, 0.055)],     # Domain 4: Entire suture domain
                       [random.uniform(-0.06, 0.0), 0.01],                           # Domain 5: Right side Line (experimental)
                       ]
 
-        rx, ry = domain_set[0]
+        rx, ry = domain_set[3]
         print(f'Random needle position: [{rx}, {ry}]')
 
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, -0.01]))
@@ -466,7 +463,6 @@ class RosAmbfCommChannel(object):
         rospy.sleep(0.1)
         self.psm2.move_js_ik_sync(t_base_grasp @ Pose(position=[rx, ry, -0.01]))
         rospy.sleep(0.1)
-
 
     def set_random_psm(self):  # TODO: Implement random psm init
         return 0
@@ -509,9 +505,9 @@ class RosAmbfCommChannel(object):
         self.AVG_needle_entry_dist = self.Average(self._average_needle_entry_dist)
         self.AVG_psm_needle_dist = self.Average(self._average_psm_needle_dist)
 
-        print(f'Metrics:')
-        print(f'avg_psm_needle {self.AVG_needle_entry_dist} | avg_needle_entry {self.AVG_psm_needle_dist} ')
-        print(f'grasp_steps {self.grasp_steps} | needle_entry_dist {self.needle_entry_dist} | _psm2_to_Needle {_psm2_to_Needle} ')
+        #print(f'Metrics:')
+        #print(f'avg_psm_needle {self.AVG_needle_entry_dist} | avg_needle_entry {self.AVG_psm_needle_dist} ')
+        #print(f'grasp_steps {self.grasp_steps} | needle_entry_dist {self.needle_entry_dist} | _psm2_to_Needle {_psm2_to_Needle} ')
 
 
     def _get_psm2_ik(self):
@@ -527,7 +523,7 @@ class RosAmbfCommChannel(object):
         delta = np.array(target_state_js, dtype=np.float32) - np.array(current_state_js, dtype=np.float32)
         delta_norm = np.linalg.norm(delta)
 
-        if abs(delta_norm - self.prev_delta_norm) <= 0.0001:
+        if abs(delta_norm - self.prev_delta_norm) <= 0.00005: #0.0001:
             self._reached_frame_flag = True
         else:
             self._reached_frame_flag = False
@@ -620,6 +616,7 @@ class RosAmbfCommChannel(object):
             t_tcp0_needle = Pose.from_msg(self.psm2.msg_measured_cp.pose).inverse() @ self.tf_buffer.lookup_pose('psm2/baselink','Needle')
             t_base_needle = self.tf_buffer.lookup_pose('psm2/baselink', 'Needle')
             self.t_base_tcp_desired = pos_to_action(t_base_needle @ Pose.from_axis_angle([0, 0, 1], -np.pi/2) @ t_tcp0_needle.inverse())
+
             if not self.needle_is_grasp:
                 self.SM_STATE = "GOTO_NEEDLE"
 
@@ -645,7 +642,7 @@ class RosAmbfCommChannel(object):
 
         if not self.Random_Needle_drop:
             self.Random_Needle_drop = False #True
-            print(f'Activating Random_Needle_drop: {self.Random_Needle_drop}')
+            #print(f'Activating Random_Needle_drop: {self.Random_Needle_drop}')
         return self.current_action
 
     def set_target_entry(self, entry_num):
@@ -657,6 +654,8 @@ class RosAmbfCommChannel(object):
             entry_pose = self.scene.measured_cp(SceneObjectType.Entry3).pose
         if entry_num == 4:
             entry_pose = self.scene.measured_cp(SceneObjectType.Entry4).pose
+
+        self.pos_entry_target_number = entry_num
 
         print(f'Target entry has been set to: Entry{entry_num}')
         self.entry_target_string = f'Entry{entry_num}'
@@ -697,7 +696,7 @@ class RosAmbfCommChannel(object):
 
         self.Random_Needle_drop = False
         self.Has_dropped_once = False
-        print(f'Resetting Random_Needle_drop: {self.Random_Needle_drop}')
+        #print(f'Resetting Random_Needle_drop: {self.Random_Needle_drop}')
         time.sleep(0.5)
 
     def send_action(self, action):
@@ -756,6 +755,7 @@ class RosAmbfCommChannel(object):
 
         # Get target entry point
         pos_entry_target = self.pos_entry
+        pos_entry_target_number = [self.pos_entry_target_number]
 
         # Stereo image from ecm
         #image = self.saver.save_image_data('mono') # PIXELEBM
@@ -764,7 +764,8 @@ class RosAmbfCommChannel(object):
             #'psm1': np.array(pos_psm1, dtype=np.float32),
             'psm2': np.array(pos_psm2, dtype=np.float32),
             'needle': np.array(pos_needle, dtype=np.float32),
-            'entry': np.array(pos_entry_target, dtype=np.float32),
+            #'entry': np.array(pos_entry_target, dtype=np.float32),
+            'entry': np.array(pos_entry_target_number, dtype=np.float32)
             #'image': np.array(image, dtype=np.float32)
         }
         return state
@@ -780,15 +781,16 @@ class RosAmbfCommChannel(object):
         if self.needle_entry_dist <= 0.0008 and self.needle_is_grasp:
             print(f'Task Succesfully completed, needle_entry_dist: {self.needle_entry_dist}, needle_is_grasp: {self.needle_is_grasp}')
             #self.done = True
-        else:
-            print(f'Task failed, needle_entry_dist: {self.needle_entry_dist}, needle_is_grasp: {self.needle_is_grasp}')
+        #else:
+            #print(f'Task failed, needle_entry_dist: {self.needle_entry_dist}, needle_is_grasp: {self.needle_is_grasp}')
 
         reward = 0
         if self.needle_entry_dist <= 100:
             if self.needle_is_grasp:
                 reward = 1 - self.needle_entry_dist*10
+                #reward = self.needle_entry_dist
 
-        print(f'reward {self.needle_entry_dist}, vs {reward}')
+        print(f'reward: {reward}')
         return reward
 
 
