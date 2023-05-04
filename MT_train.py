@@ -39,8 +39,10 @@ matplotlib.use('Agg') # memory issue fix? # TODO: Remove this? I don't think it 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
+        #tf.config.experimental.set_virtual_device_configuration(
+        #    gpus[0],[tf.config.experimental.VirtualDeviceConfiguration(memory_limit=18000)])
         tf.config.experimental.set_virtual_device_configuration(
-            gpus[0],[tf.config.experimental.VirtualDeviceConfiguration(memory_limit=18000)])
+            gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=10000)])
     except RuntimeError as e:
         print(e)
 
@@ -71,24 +73,29 @@ def evaluation_step(eval_env, eval_actor, eval_episodes):
     return eval_actor.metrics
 
 
-
-
 def train():
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = f'IBC_TEST_LEVEL_0/'
-    dataset_path = 'LEVEL_0/suture_throw_demo_*.tfrecord'
+    root_dir = f'IBC_LEVEL_3/'
+    dataset_path = 'LEVEL_3/suture_throw_demo_*.tfrecord'
 
     network_width = wandb.config.network_width
     batch_size = wandb.config.batch_size
     num_iterations = wandb.config.num_iterations
     num_counter_examples = wandb.config.num_counter_examples
     learning_rate = wandb.config.learning_rate
+    num_action_samples = wandb.config.num_action_samples
+    langevin_iteration = wandb.config.langevin_iteration
+    langevin_stepsize = wandb.config.langevin_stepsize
+    eval_interval = wandb.config.eval_interval
+    eval_episodes = wandb.config.eval_episodes
+    decay_steps = wandb.config.decay_steps
+    decay_rate = wandb.config.decay_rate
 
-    eval_episodes = 5                                           # Number of episodes for eval
-    eval_interval = (num_iterations * eval_episodes) / 60       # 60 minutes eval time
-    eval_interval = round(eval_interval / 100) * 100            # Round to the nearest 100ths
+    #eval_episodes = 5                                           # Number of episodes for eval
+    #eval_interval = (num_iterations * eval_episodes) / 60       # 60 minutes eval time
+    #eval_interval = round(eval_interval / 100) * 100            # Round to the nearest 100ths
 
     # Load openai gym for evaluating the learned policy
     env_name = "SurgicalEnv-v2"
@@ -140,7 +147,14 @@ def train():
         agent = ImplicitBCAgent(time_step_spec=time_step_tensor_spec, action_spec=action_tensor_spec,
                                 action_sampling_spec=action_sampling_spec, obs_norm_layer=norm_info.obs_norm_layer,
                                 act_norm_layer=norm_info.act_norm_layer, act_denorm_layer=norm_info.act_denorm_layer,
-                                cloning_network=energy_model, num_counter_examples=num_counter_examples, train_step_counter=train_step, learning_rate=learning_rate)
+                                cloning_network=energy_model, num_counter_examples=num_counter_examples,
+                                train_step_counter=train_step, learning_rate=learning_rate,
+                                num_action_samples=num_action_samples,
+                                langevin_iteration=langevin_iteration,
+                                langevin_stepsize=langevin_stepsize,
+                                decay_steps=decay_steps,
+                                decay_rate=decay_rate
+                                )
         agent.initialize()
 
         # Save model
@@ -215,14 +229,21 @@ def train():
 
 def main(_):
     # wandb project name
-    project_name = "MT_IBC_PIPELINE"
+    project_name = "MT_IBC_PIPELINE_V1"
 
     # Configurations
-    num_iterations = 50000             #random.choice([50000])
-    network_width = 128                 #random.choice([128, 256, 512])
-    batch_size = 512                    #random.choice([64, 128, 256])
+    num_iterations = 50000              #random.choice([50000])
+    eval_interval = 5000
+    eval_episodes = 4
+    network_width = 256                  #random.choice([128, 256, 512])
+    batch_size = 128                    #random.choice([64, 128, 256])
     num_counter_examples = 4            #random.choice([4, 6, 8, 10])
-    learning_rate = 1e-4                #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
+    learning_rate = 1e-6                #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
+    num_action_samples = 512
+    langevin_iteration = 150
+    langevin_stepsize = 1e-3            # Final langevin stepsizes
+    decay_steps = 80
+    decay_rate = 0.99
 
     # # start a new wandb run to track this script
     wandb.init(
@@ -231,10 +252,17 @@ def main(_):
         # track hyperparameters and run metadata
         config={
             'num_iterations': num_iterations,
+            'eval_interval': eval_interval,
+            'eval_episodes': eval_episodes,
             'network_width': network_width,
             'batch_size': batch_size,
             'num_counter_examples': num_counter_examples,
             'learning_rate': learning_rate,
+            'num_action_samples': num_action_samples,
+            'langevin_iteration': langevin_iteration,
+            'langevin_stepsize': langevin_stepsize,
+            'decay_steps': decay_steps,
+            'decay_rate': decay_rate,
         }
     )
 
