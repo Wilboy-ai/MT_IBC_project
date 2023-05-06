@@ -31,26 +31,20 @@ import get_cloning_network
 
 
 def training_step(bc_learner, fused_train_steps, train_step):
-    print("Inside training_step")
-
     """Runs training step and saves the loss to tensorboard"""
     reduced_loss_info = bc_learner.run(iterations=fused_train_steps)
 
-    print("bc_learner.run works")
-
-    if reduced_loss_info:
-        with bc_learner.train_summary_writer.as_default(), tf.summary.record_if(True):
-            tf.summary.scalar('reduced_loss', reduced_loss_info.loss, step=train_step)
-    print("reduced_loss_info works")
+    return reduced_loss_info
 
 
 
 def evaluation_step(eval_env, eval_actor, eval_episodes):
     """Runs evaluation routine in gym and returns metrics."""
     logging.info('Evaluation policy.')
+    custom_eval_seeds = [67, 29, 56, 182, 84, 94654, 549, 8423, 54, 80]
     with tf.name_scope('eval'):
         for eval_seed in range(eval_episodes):
-            eval_env.seed(eval_seed)
+            eval_env.seed(custom_eval_seeds[eval_seed])
             eval_actor.reset()
             eval_actor.run()
 
@@ -63,8 +57,17 @@ def train():
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = 'output/'
-    dataset_path = 'data/2d_oracle_particle_*.tfrecord'
+    root_dir = f'BC_LEVEL_3-1/'
+    dataset_path = 'LEVEL_3/suture_throw_demo_*.tfrecord'
+
+    # Make root folder
+    os.makedirs(root_dir)
+
+    # make video folder
+    save_video_path = f'{root_dir}Videos'
+    os.makedirs(save_video_path)
+
+
     network_width = 256
     batch_size = 512
     num_iterations = 2000
@@ -74,8 +77,17 @@ def train():
     decay_steps = 100,
 
     # Load openai gym for evaluating the learned policy
-    env_name = "Particle-v1"
-    eval_env = suite_gym.load(env_name)
+    env_name = "SurgicalEnv-v2"
+    # Retry Loading environment logic
+    # It doesn't always connect to the launch_crtk_interface, so you have to retry, idk how to fix it..
+    for i in range(0, 5):
+        try:
+            eval_env = suite_gym.load(env_name)
+            break
+        except Exception:
+            print(f'Failed to load SurgicalEnv-v2, will try again ({i}/5)')
+            time.sleep(1)
+            continue
     eval_env = wrappers.HistoryWrapper(eval_env, history_length=2, tile_first_step_obs=True)
 
     # Get shape of observation and action space
@@ -199,42 +211,47 @@ def train():
 
         print("aggregated_summary_dir works")
 
-    training_step(bc_learner, 50, train_step)
-    print("training_step works")
-    evaluation_step(eval_env, eval_actor, eval_episodes=20)
-    print("evaluation_step works")
-    eval_env.seed(42)
-    make_video(agent, eval_env, root_dir, step=train_step.numpy(), strategy=strategy)
-    print("make_video works")
+        # Container for wandb metrics
+    wandb_all_metrics = {}
+
+    trainings_metrics = training_step(bc_learner, 50, train_step)
+    eval_env.set_video_title(f'{save_video_path}/Suture_eval_50')
+    eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
+
+    def update_wandb_all_metrics(_trainings_metrics, _eval_metrics):
+        for name, metric in _trainings_metrics.extra.items():
+            wandb_all_metrics[name] = metric
+        wandb_all_metrics['loss'] = _trainings_metrics.loss
+
+        for metric in _eval_metrics:
+            name = metric.name
+            result = metric.result()
+            wandb_all_metrics[name] = result
+
+    update_wandb_all_metrics(trainings_metrics, eval_metrics)
 
     # Main train loop
+    print(f'Step starting at: {train_step.numpy()}')
+    # Main train loop
     while train_step.numpy() < num_iterations:
-        training_step(bc_learner, 50, train_step)
+        print(f'At training step: {train_step.numpy()}/{num_iterations}')
+
+        trainings_metrics = training_step(bc_learner, 50, train_step)
+
+        update_wandb_all_metrics(trainings_metrics, eval_metrics)
+        wandb.log(wandb_all_metrics)
 
         # Evaluate policy
-        if train_step.numpy() % 250 == 0:
-            all_metrics = []
-
-            metrics = evaluation_step(eval_env, eval_actor, eval_episodes=20)
-            all_metrics.append(metrics)
+        if train_step.numpy() % eval_interval == 0:
+            print(f'Training at step: {train_step.numpy()}/{num_iterations}')
 
             # Generate video of learned policy
-            if video:
-                eval_env.seed(42)
-                make_video(agent, eval_env, root_dir, step=train_step.numpy(), strategy=strategy)
-
-            metric_results = collections.defaultdict(list)
-            for env_metrics in all_metrics:
-                for metric in env_metrics:
-                    metric_results[metric.name].append(metric.result())
-
-            with summary_writer.as_default(), common.soft_device_placement(), tf.summary.record_if(lambda: True):
-                for key, value in metric_results.items():
-                    tf.summary.scalar(name=os.path.join('AggregatedMetrics/', key), data=sum(value) / len(value),
-                                      step=train_step)
+            eval_env.set_video_title(f'{save_video_path}/Suture_eval_{train_step.numpy()}')
+            eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
     summary_writer.flush()
-
+    # [optional] finish the wandb run, necessary in notebooks
+    wandb.finish()
 
 def main(_):
     tf.config.experimental_run_functions_eagerly(False)
