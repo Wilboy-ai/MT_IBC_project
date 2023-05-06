@@ -1,3 +1,7 @@
+import random
+from os import environ
+environ['XLA_FLAGS']="--xla_gpu_cuda_data_dir=/usr/lib/cuda"
+
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
@@ -18,13 +22,14 @@ from tf_agents.networks import sequential
 from tf_agents.networks import network
 import tf_agents.networks
 
+from MT_RosAmbfCommChannel import RosAmbfCommChannel
+import MT_Simple_AccelNet_env
 
 from tf_agents.agents import BehavioralCloningAgent
 from eval import get_eval_actor
 from load_data import create_dataset_fn, get_normalizers
 from network import get_energy_model
 from tf_agents.networks import sequential
-import particle_env
 from utils import get_sampling_spec, make_video
 import mse_agent
 import get_cloning_network
