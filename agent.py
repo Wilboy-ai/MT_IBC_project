@@ -18,7 +18,10 @@ class ImplicitBCAgent(tf_agent.TFAgent):
 
     def __init__(self, time_step_spec, action_spec, action_sampling_spec,
                  cloning_network, obs_norm_layer=None, act_norm_layer=None, act_denorm_layer=None,
-                 num_counter_examples=8, train_step_counter=None, name=None, learning_rate=1e-3):  # 256
+                 num_counter_examples=8, train_step_counter=None, name=None, learning_rate=1e-3, num_action_samples=512,
+                 langevin_iteration=100, langevin_stepsize=1e-1,
+                 decay_steps=100,
+                 decay_rate=0.99):  # 256
         # tf.Module dependency allows us to capture checkpoints and saved models with the agent.
         tf.Module.__init__(self, name=name)
 
@@ -27,10 +30,15 @@ class ImplicitBCAgent(tf_agent.TFAgent):
         self._act_norm_layer = act_norm_layer
         self._act_denorm_layer = act_denorm_layer
         self.cloning_network = cloning_network
+        self.num_action_samples = num_action_samples
+        self.langevin_iteration = langevin_iteration
+        self.langevin_stepsize = langevin_stepsize
+        self.decay_steps = decay_steps
+        self.decay_rate = decay_rate
         self.cloning_network.create_variables(training=False)
 
-        learning_rate_schedule = (tf.keras.optimizers.schedules.ExponentialDecay(learning_rate, decay_steps=100,
-                                                                                 decay_rate=0.99))
+        learning_rate_schedule = (tf.keras.optimizers.schedules.ExponentialDecay(learning_rate, decay_steps=self.decay_steps,
+                                                                                 decay_rate=self.decay_rate))
         self._optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
 
         self._num_counter_examples = num_counter_examples
@@ -46,6 +54,8 @@ class ImplicitBCAgent(tf_agent.TFAgent):
         # setup.
         collect_policy = IbcPolicy(time_step_spec=time_step_spec, action_spec=action_spec,
                                    action_sampling_spec=action_sampling_spec, actor_network=cloning_network,
+                                   num_action_samples=self.num_action_samples,
+                                   langevin_iteration=langevin_iteration, langevin_stepsize=langevin_stepsize,
                                    obs_norm_layer=self._obs_norm_layer, act_denorm_layer=self._act_denorm_layer)
 
         policy = greedy_policy.GreedyPolicy(collect_policy)
@@ -201,6 +211,8 @@ class ImplicitBCAgent(tf_agent.TFAgent):
                                                           random_uniform_example_actions, policy_state=(),
                                                           min_actions=self._action_sampling_spec.minimum,
                                                           max_actions=self._action_sampling_spec.maximum,
+                                                          num_iterations=self.langevin_iteration,
+                                                          langevin_stepsize=self.langevin_stepsize,
                                                           training=False, tfa_step_type=(), return_chain=True)
 
         lang_opt_counter_example_actions, chain_data = langevin_return
@@ -216,12 +228,6 @@ class ImplicitBCAgent(tf_agent.TFAgent):
         combined_true_counter_actions = tf.nest.map_structure(concat_and_squash_actions, counter_example_actions,
                                                               expanded_actions)
 
-        # with tf.device('/CPU:0'):
-        #     counter_example_actions_array = counter_example_actions.numpy()
-        # print(f'counter_example_actions: {counter_example_actions_array}')
-        #print(f'counter_example_actions: {counter_example_actions.numpy()}')
-        #print(f'combined_true_counter_actions: {combined_true_counter_actions.numpy()}')
-        #print(f'chain_data: {chain_data}')
         return counter_example_actions, combined_true_counter_actions, chain_data
 
 
@@ -229,7 +235,7 @@ class IbcPolicy(tf_policy.TFPolicy):
     """Class to build Actor Policies."""
 
     def __init__(self, time_step_spec, action_spec, action_sampling_spec, actor_network, policy_state_spec=(),
-                 num_action_samples=512, obs_norm_layer=None, act_denorm_layer=None):
+                 num_action_samples=512, langevin_iteration=100, langevin_stepsize=1e-1, obs_norm_layer=None, act_denorm_layer=None): # TODO: num_action_samples should be set by wandb
 
         if isinstance(actor_network, network.Network):
             # To work around create_variables we force stuff to be build beforehand.
@@ -238,6 +244,9 @@ class IbcPolicy(tf_policy.TFPolicy):
 
             if not policy_state_spec:
                 policy_state_spec = actor_network.state_spec
+
+        self.langevin_iteration = langevin_iteration
+        self.langevin_stepsize = langevin_stepsize
 
         self._action_sampling_spec = action_sampling_spec
 
@@ -284,6 +293,8 @@ class IbcPolicy(tf_policy.TFPolicy):
                                                          policy_state=policy_state,
                                                          min_actions=self._action_sampling_spec.minimum,
                                                          max_actions=self._action_sampling_spec.maximum,
+                                                         num_iterations=self.langevin_iteration,
+                                                         langevin_stepsize=self.langevin_stepsize,
                                                          training=False, tfa_step_type=time_step.step_type)
 
         probs = mcmc.get_probabilities(self._actor_network, batch_size, self._num_action_samples,

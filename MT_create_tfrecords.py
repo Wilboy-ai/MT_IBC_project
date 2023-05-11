@@ -49,13 +49,15 @@ def create_episodes(dataset_path, num_episodes, index):
         try:
             env = suite_gym.load('SurgicalEnv-v2')
             break
-        except Exception:
+        except Exception as e:
             print(f'Failed to load SurgicalEnv-v2, will try again ({i}/5)')
+            print(f'Error message: {str(e)}')
             time.sleep(1)
             continue
 
     policy = MT_SutureOracle(env)
-    env.set_video_title(f'Suture_demo_{index}')
+    env.set_video_title(f'demo_videos/Suture_demo_{index}')
+    env.set_csv_file(f'csv_files/suture_throw_demo_{index}.csv')
     env.set_mode_demo()
 
     observers = []
@@ -71,8 +73,8 @@ def create_episodes(dataset_path, num_episodes, index):
 
 def main(_):
     num_episodes = 1
-    for i in [19]: #range(0, 20):
-        dataset_path = f'LEVEL_3/suture_throw_demo_{i}.tfrecord'
+    for i in range(1, 2):
+        dataset_path = f'FULL_PIPELINE_DATA/suture_throw_demo_{i}.tfrecord'
         create_episodes(dataset_path, num_episodes, i)
 
 if __name__ == "__main__":

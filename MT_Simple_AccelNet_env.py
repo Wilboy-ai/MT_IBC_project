@@ -18,7 +18,7 @@ import datetime
 import random
 from tf_agents.metrics import py_metrics
 from tf_agents.utils import nest_utils
-
+import csv
 
 np.set_printoptions(precision=32)
 
@@ -43,6 +43,8 @@ class SurgicalEnv(gym.Env):
         self.done = False
         self._total_reward = 0
         self.mode = "TRAIN"
+
+        self.csv_file = f'csv_files/unknown.csv'
 
 
         # Define the action space
@@ -71,6 +73,10 @@ class SurgicalEnv(gym.Env):
 
     def set_video_title(self, title):
         self.video_title = title
+
+    def set_csv_file(self, title):
+        self.csv_file = title
+
 
     def test(self):
         print("this is a test!")
@@ -135,6 +141,16 @@ class SurgicalEnv(gym.Env):
         if not self.done:
             self._comm_channel._update_metrics()
             self.update_metrics()
+
+
+        # open the file in the write mode
+        with open(self.csv_file, 'a') as f:
+            # create the csv writer
+            writer = csv.writer(f)
+            # Add the data in row
+            row = [self.steps, reward, self.needle_entry_dist, self.grasp_steps]
+            # write a row to the csv file
+            writer.writerow(row)
 
         return state, reward, self.done, info
 

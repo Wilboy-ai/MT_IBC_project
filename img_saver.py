@@ -103,19 +103,22 @@ class ImageSaver:
 
             # Combine the left and right images horizontally
             combined_img = np.concatenate((resized_left, resized_right), axis=1)
-            resized_combined_img = cv2.resize(combined_img, (135, 480))
-            gray_img = cv2.cvtColor(resized_combined_img, cv2.COLOR_BGR2GRAY)
-            # Normalize the image
-            normalized_img = gray_img.astype('float32') / 255.0
-        else:
-            resized_right = cv2.resize(self.right_frame, (120, 68))
-            gray_img = cv2.cvtColor(resized_right, cv2.COLOR_BGR2GRAY)
+            #resized_combined_img = cv2.resize(combined_img, (135, 480))
+            #gray_img = cv2.cvtColor(resized_combined_img, cv2.COLOR_BGR2GRAY)
             # Normalize the image
             #normalized_img = gray_img.astype('float32') / 255.0
+            #combined_img = combined_img.astype('float32')/255.0
+            return combined_img
+        #else:
+            #resized_right = cv2.resize(self.right_frame, (120, 68))
+            #gray_img = cv2.cvtColor(resized_right, cv2.COLOR_BGR2GRAY)
+            # Normalize the image
+            #normalized_img = gray_img.astype('float32') / 255.0
+            #return resized_right
 
         # Flatten the image
         #flattened_img = normalized_img.flatten()
-        return resized_right
+        #return resized_right
 
     def get_frame(self):
         while self.right_frame is None:

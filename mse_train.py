@@ -68,8 +68,6 @@ def training_step(bc_learner, fused_train_steps, train_step):
 
     return reduced_loss_info
 
-
-
 def evaluation_step(eval_env, eval_actor, eval_episodes):
     """Runs evaluation routine in gym and returns metrics."""
     logging.info('Evaluation policy.')
@@ -153,7 +151,6 @@ def train():
 
         print("##### action_sampling_spec #####")
         print(action_sampling_spec)
-
 
         # Create cloning network for BCAgent
         cloning_network = get_cloning_network.get_cloning_network(name="bc_model",

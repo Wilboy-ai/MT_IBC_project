@@ -36,6 +36,9 @@ import csv
 # Connect to AMBF and setup image subscriber
 import img_saver as ImgSaver
 
+import GetEstimation
+
+
 # TODO: Clean up imports
 
 
@@ -357,6 +360,7 @@ class RosAmbfCommChannel(object):
     def __init__(self):  # TODO: could use a clean up
         self.SM_STATE = "GOTO_NEEDLE"
         self.saver = ImgSaver.ImageSaver()
+        self.vision_method = GetEstimation.estimation("regression")
         # Create an instance of the client
         rospy.init_node('RosAmbfCC')
         time.sleep(0.5)
@@ -422,6 +426,8 @@ class RosAmbfCommChannel(object):
 
         self.pos_entry_target_number = 1
 
+
+
     def set_seed(self, seed=None):
         print(f'random seed set in wrapper: {seed}')
         random.seed(seed)
@@ -447,7 +453,7 @@ class RosAmbfCommChannel(object):
         domain_set = [[-0.035, 0.01],                                               # Domain 0: Fixed position
                       [random.uniform(-0.04, -0.03), random.uniform(0, 0.02)],      # Domain 1: Small displacement
                       [random.uniform(-0.06, -0.01), random.uniform(0, 0.02)],      # Domain 2: Medium displacement
-                      [random.uniform(-0.08, 0.001), random.uniform(0, 0.015)],      # Domain 3: Entire right side
+                      [random.uniform(-0.08, 0.001), random.uniform(0, 0.015)],     # Domain 3: Entire right side
                       [random.uniform(-0.08, 0.001), random.uniform(0, 0.055)],     # Domain 4: Entire suture domain
                       [random.uniform(-0.06, 0.0), 0.01],                           # Domain 5: Right side Line (experimental)
                       ]
@@ -749,24 +755,39 @@ class RosAmbfCommChannel(object):
         cp_2 = self.psm2.measured_jp().pose
         pos_psm2 = [cp_2.position.x, cp_2.position.y, cp_2.position.z, cp_2.orientation.x, cp_2.orientation.y, cp_2.orientation.z, cp_2.orientation.w]
 
+        # Stereo image from ecm
+        image = self.saver.save_image_data('stereo')
+
         # Needle pose
         needle = self.scene.measured_cp(SceneObjectType.Needle).pose
         pos_needle = [needle.position.x, needle.position.y, needle.position.z, needle.orientation.x, needle.orientation.y, needle.orientation.z, needle.orientation.w]
+        # TODO: implement vision pipeline interface
+        pos_needle_EST = self.vision_method.getEstimation(image)
+        print(f"{pos_needle} vs. {pos_needle_EST}")
+
+        # add noise to needle
+        #noisy_pos_needle = np.array(pos_needle, dtype=np.float32)
+        #print(f'Before noise: {noisy_pos_needle}')
+        #mu, sigma = 0, 0.001  # mean and standard deviation
+        #noise = np.random.normal(mu, sigma, 7)
+        #noisy_pos_needle = noisy_pos_needle + noise
+        #print(f'After noise: {noisy_pos_needle}')
 
         # Get target entry point
         pos_entry_target = self.pos_entry
         pos_entry_target_number = [self.pos_entry_target_number]
 
-        # Stereo image from ecm
-        #image = self.saver.save_image_data('mono') # PIXELEBM
+
 
         state = {
             #'psm1': np.array(pos_psm1, dtype=np.float32),
             'psm2': np.array(pos_psm2, dtype=np.float32),
             'needle': np.array(pos_needle, dtype=np.float32),
+            #'needle': noisy_pos_needle, # Artificial noisy data
             #'entry': np.array(pos_entry_target, dtype=np.float32),
             'entry': np.array(pos_entry_target_number, dtype=np.float32)
             #'image': np.array(image, dtype=np.float32)
+
         }
         return state
 

@@ -60,11 +60,11 @@ def training_step(bc_learner, fused_train_steps, train_step):
 def evaluation_step(eval_env, eval_actor, eval_episodes):
     """Runs evaluation routine in gym and returns metrics."""
     logging.info('Evaluation policy.')
-    custom_eval_seeds = [67, 29, 56, 182, 84, 94654, 549, 8423, 54, 80]
+    #custom_eval_seeds = [67, 29, 56, 182, 84, 94654, 549, 8423, 54, 80]
 
     with tf.name_scope('eval'):
         for eval_seed in range(eval_episodes):
-            eval_env.seed(custom_eval_seeds[eval_seed])
+            eval_env.seed(10+eval_seed)
             eval_actor.reset()
             eval_actor.run()
 
@@ -73,35 +73,28 @@ def evaluation_step(eval_env, eval_actor, eval_episodes):
     return eval_actor.metrics
 
 
-def train(iteration_number):
+def train():
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = f'IBC_LEVEL_3_V2-{iteration_number}/'
+    root_dir = f'right_domain_eval/'
     dataset_path = 'LEVEL_3/suture_throw_demo_*.tfrecord'
-
-    # Make root folder
-    os.makedirs(root_dir)
 
     # make video folder
     save_video_path = f'{root_dir}Videos'
     os.makedirs(save_video_path)
-
     print(f'Running: {root_dir}')
 
-    # Load in hyper-parameters from wandb config
-    network_width = wandb.config.network_width
-    batch_size = wandb.config.batch_size
-    num_iterations = wandb.config.num_iterations
-    num_counter_examples = wandb.config.num_counter_examples
-    learning_rate = wandb.config.learning_rate
-    num_action_samples = wandb.config.num_action_samples
-    langevin_iteration = wandb.config.langevin_iteration
-    langevin_stepsize = wandb.config.langevin_stepsize
-    eval_interval = wandb.config.eval_interval
-    eval_episodes = wandb.config.eval_episodes
-    decay_steps = wandb.config.decay_steps
-    decay_rate = wandb.config.decay_rate
+    # Configurations
+    network_width = 190
+    batch_size = 64
+    num_counter_examples = 4
+    learning_rate = 1e-2
+    num_action_samples = 1024
+    langevin_iteration = 60
+    langevin_stepsize = 1e-11
+    decay_steps = 80
+    decay_rate = 0.99
 
     # Load openai gym for evaluating the learned policy
     env_name = "SurgicalEnv-v2"
@@ -119,10 +112,7 @@ def train(iteration_number):
     eval_env = wrappers.HistoryWrapper(eval_env, history_length=2, tile_first_step_obs=True)
     # TODO: What should these be history_length=2, tile_first_step_obs=True
 
-
-
-
-    #Get shape of observation and action space
+    # Get shape of observation and action space
     obs_tensor_spec, action_tensor_spec, time_step_tensor_spec = (spec_utils.get_tensor_specs(eval_env))
 
     # Get dataset statistics for data normalization
@@ -166,7 +156,7 @@ def train(iteration_number):
                                 )
         agent.initialize()
 
-        # Save model
+        # # Save model
         saved_model_dir = os.path.join(root_dir, learner.POLICY_SAVED_MODEL_DIR)
         extra_concrete_functions = []
         try:
@@ -190,97 +180,22 @@ def train(iteration_number):
                                      run_optimizer_variable_init=False)
         # Create TFAgents actor which applies the learned policy in the gym environment
         eval_actor, eval_success_metric = get_eval_actor(agent, eval_env, train_step, root_dir, strategy,
-                                                         env_name.replace('/', '_'))
+                                                          env_name.replace('/', '_'))
 
-        aggregated_summary_dir = os.path.join(root_dir, 'eval')
-        summary_writer = tf.summary.create_file_writer(aggregated_summary_dir, flush_millis=10000)
+        # aggregated_summary_dir = os.path.join(root_dir, 'eval')
+        # summary_writer = tf.summary.create_file_writer(aggregated_summary_dir, flush_millis=10000)
 
-    # Container for wandb metrics
-    wandb_all_metrics = {}
-
-    trainings_metrics = training_step(bc_learner, 50, train_step)
-    eval_env.set_video_title(f'{save_video_path}/Suture_eval_50')
-    eval_env.set_csv_file(f'{root_dir}Suture_eval_50.csv')
-    eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
-
-    def update_wandb_all_metrics(_trainings_metrics, _eval_metrics):
-        for name, metric in _trainings_metrics.extra.items():
-            wandb_all_metrics[name] = metric
-        wandb_all_metrics['loss'] = _trainings_metrics.loss
-
-        for metric in _eval_metrics:
-            name = metric.name
-            result = metric.result()
-            wandb_all_metrics[name] = result
-
-    update_wandb_all_metrics(trainings_metrics, eval_metrics)
-
-    # Main train loop
+    eval_episodes = 50
     print(f'Step starting at: {train_step.numpy()}')
-    while train_step.numpy() < num_iterations:
-        print(f'At training step: {train_step.numpy()}/{num_iterations}')
+    eval_env.set_video_title(f'{save_video_path}/Suture_eval_videos')
+    eval_env.set_csv_file(f'{root_dir}Suture_eval.csv')
+    evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
-        trainings_metrics = training_step(bc_learner, 50, train_step)
-
-        update_wandb_all_metrics(trainings_metrics, eval_metrics)
-        wandb.log(wandb_all_metrics)
-
-        # Evaluate policy
-        if train_step.numpy() % eval_interval == 0:
-            print(f'Training at step: {train_step.numpy()}/{num_iterations}')
-
-            # Generate video of learned policy
-            eval_env.set_video_title(f'{save_video_path}/Suture_eval_{train_step.numpy()}')
-            eval_env.set_csv_file(f'{root_dir}Suture_eval_{train_step.numpy()}.csv')
-            eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
-
-    summary_writer.flush()
-    # [optional] finish the wandb run, necessary in notebooks
-    wandb.finish()
 
 def main(_):
-    for iteration_number in range(1, 2):
-        # wandb project name
-        project_name = "MT_FULL_PIPELINE_V1"
-
-        # Configurations
-        num_iterations = 50000              #random.choice([50000])
-        eval_interval = 5000
-        eval_episodes = 10
-        network_width = 190 #+ (10 * random.randint(-10, 10))               #random.choice([128, 200, 256, 300, 512])
-        batch_size = 64 #+ (10 * random.randint(-5, 5))                     #random.choice([64, 80, 128, 150, 256])
-        num_counter_examples = 4 #+ random.randint(0, 5)           #random.choice([4, 6, 8, 10])
-        learning_rate = 1e-2 #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])  #              #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
-        num_action_samples = 1024 #+ (10 * random.randint(-100, 100))             #random.choice([64, 128, 256, 512, 1024])
-        langevin_iteration = 60 #+ (10 * random.randint(-5, 5))            #random.choice([50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
-        langevin_stepsize = 1e-11 #random.choice([1e-9, 1e-10, 1e-11, 1e-12, 1e-13])  #           #random.choice([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8])            # Final langevin stepsizes
-        decay_steps = 80 #+ (10 * random.randint(-5, 500))                    #random.choice([100, 200, 300, 400, 500])
-        decay_rate = 0.99 #random.uniform(0.8, 0.99)  #               #random.choice([0.8, 0.95, 0.99]) #0.99
-
-        # # start a new wandb run to track this script
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project=project_name,
-            # track hyperparameters and run metadata
-            config={
-                'num_iterations': num_iterations,
-                'eval_interval': eval_interval,
-                'eval_episodes': eval_episodes,
-                'network_width': network_width,
-                'batch_size': batch_size,
-                'num_counter_examples': num_counter_examples,
-                'learning_rate': learning_rate,
-                'num_action_samples': num_action_samples,
-                'langevin_iteration': langevin_iteration,
-                'langevin_stepsize': langevin_stepsize,
-                'decay_steps': decay_steps,
-                'decay_rate': decay_rate,
-            }
-        )
-
         tf.config.experimental_run_functions_eagerly(False)
-        train(iteration_number)
+        train()
+
 
 if __name__ == "__main__":
     multiprocessing.handle_main(functools.partial(app.run, main))
-
