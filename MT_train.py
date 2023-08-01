@@ -42,7 +42,7 @@ if gpus:
         #tf.config.experimental.set_virtual_device_configuration(
         #    gpus[0],[tf.config.experimental.VirtualDeviceConfiguration(memory_limit=18000)])
         tf.config.experimental.set_virtual_device_configuration(
-            gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=10000)])
+            gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=18000)])
     except RuntimeError as e:
         print(e)
 
@@ -77,20 +77,28 @@ def train(iteration_number):
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = f'IBC_LEVEL_3_V2-{iteration_number}/'
-    dataset_path = 'LEVEL_3/suture_throw_demo_*.tfrecord'
+    root_dir = f'IBC_RUNS/AE-{iteration_number}/'
+    dataset_path = 'Trainings_Data/AUTOENCODER_DATASET/suture_throw_demo_*.tfrecord'
+
+    # This is logged by wandb, can help with bookkeeping
+    print(f'Run name: {root_dir}')
+    print(f'Using data from: {dataset_path}')
 
     # Make root folder
-    os.makedirs(root_dir)
+    # Make root folder if it doesn't exist
+    if not os.path.exists(root_dir):
+        os.makedirs(root_dir)
 
     # make video folder
     save_video_path = f'{root_dir}Videos'
-    os.makedirs(save_video_path)
+    # Make root folder if it doesn't exist
+    if not os.path.exists(save_video_path):
+        os.makedirs(save_video_path)
 
     print(f'Running: {root_dir}')
-
     # Load in hyper-parameters from wandb config
     network_width = wandb.config.network_width
+    network_depth = wandb.config.network_depth
     batch_size = wandb.config.batch_size
     num_iterations = wandb.config.num_iterations
     num_counter_examples = wandb.config.num_counter_examples
@@ -150,7 +158,7 @@ def train(iteration_number):
                                                  uniform_boundary_buffer=0.05)
 
         # Create MLP (= probabilistically modelled energy function)
-        energy_model = get_energy_model(obs_tensor_spec, action_tensor_spec, network_width)
+        energy_model = get_energy_model(obs_tensor_spec, action_tensor_spec, network_depth, network_width)
 
         # Wrapper which contains the training process
         agent = ImplicitBCAgent(time_step_spec=time_step_tensor_spec, action_spec=action_tensor_spec,
@@ -201,7 +209,7 @@ def train(iteration_number):
     trainings_metrics = training_step(bc_learner, 50, train_step)
     eval_env.set_video_title(f'{save_video_path}/Suture_eval_50')
     eval_env.set_csv_file(f'{root_dir}Suture_eval_50.csv')
-    eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
+    eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=3) # Only run the start bench 3 times
 
     def update_wandb_all_metrics(_trainings_metrics, _eval_metrics):
         for name, metric in _trainings_metrics.extra.items():
@@ -215,6 +223,8 @@ def train(iteration_number):
 
     update_wandb_all_metrics(trainings_metrics, eval_metrics)
 
+    best_score = wandb_all_metrics["AverageReturn"]
+
     # Main train loop
     print(f'Step starting at: {train_step.numpy()}')
     while train_step.numpy() < num_iterations:
@@ -225,6 +235,15 @@ def train(iteration_number):
         update_wandb_all_metrics(trainings_metrics, eval_metrics)
         wandb.log(wandb_all_metrics)
 
+        # Early stop function
+        newest_score = wandb_all_metrics["AverageReturn"]
+        print(f'best_score; {best_score} vs. {newest_score}')
+        if best_score < newest_score:
+            best_score = newest_score
+        #if train_step.numpy() >= 5000 and best_score <= 1:
+        #    print(f'Early stopping!')
+        #    break
+
         # Evaluate policy
         if train_step.numpy() % eval_interval == 0:
             print(f'Training at step: {train_step.numpy()}/{num_iterations}')
@@ -234,28 +253,76 @@ def train(iteration_number):
             eval_env.set_csv_file(f'{root_dir}Suture_eval_{train_step.numpy()}.csv')
             eval_metrics = evaluation_step(eval_env, eval_actor, eval_episodes=eval_episodes)
 
+
+
     summary_writer.flush()
     # [optional] finish the wandb run, necessary in notebooks
     wandb.finish()
 
 def main(_):
-    for iteration_number in range(1, 2):
+    for iteration_number in range(0, 1):
         # wandb project name
-        project_name = "MT_FULL_PIPELINE_V1"
+        project_name = "MT_AUTOENCODER"
 
-        # Configurations
-        num_iterations = 50000              #random.choice([50000])
-        eval_interval = 5000
+        # Optimal Configurations
+        # num_iterations = 15000
+        # eval_interval = 2000
+        # eval_episodes = 10
+        # network_width = 190
+        # network_depth = 2
+        # batch_size = 64
+        # num_counter_examples = 4
+        # learning_rate = 1e-2
+        # num_action_samples = 1024
+        # langevin_iteration = 60
+        # langevin_stepsize = 1e-11
+        # decay_steps = 80
+        # decay_rate = 0.99
+
+        # Default Configurations
+        num_iterations = 25000
+        eval_interval = 2000
         eval_episodes = 10
-        network_width = 190 #+ (10 * random.randint(-10, 10))               #random.choice([128, 200, 256, 300, 512])
-        batch_size = 64 #+ (10 * random.randint(-5, 5))                     #random.choice([64, 80, 128, 150, 256])
-        num_counter_examples = 4 #+ random.randint(0, 5)           #random.choice([4, 6, 8, 10])
-        learning_rate = 1e-2 #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])  #              #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
-        num_action_samples = 1024 #+ (10 * random.randint(-100, 100))             #random.choice([64, 128, 256, 512, 1024])
-        langevin_iteration = 60 #+ (10 * random.randint(-5, 5))            #random.choice([50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
-        langevin_stepsize = 1e-11 #random.choice([1e-9, 1e-10, 1e-11, 1e-12, 1e-13])  #           #random.choice([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8])            # Final langevin stepsizes
-        decay_steps = 80 #+ (10 * random.randint(-5, 500))                    #random.choice([100, 200, 300, 400, 500])
-        decay_rate = 0.99 #random.uniform(0.8, 0.99)  #               #random.choice([0.8, 0.95, 0.99]) #0.99
+        network_width = 256 #256 #128
+        network_depth = 2 #2
+        batch_size = 256# 128
+        num_counter_examples = 4
+        learning_rate = 0.01
+        num_action_samples = 128 #512
+        langevin_iteration = 126 #100
+        langevin_stepsize = 1.e-3 #1.e-5
+        decay_steps = 125 #100
+        decay_rate = 0.99
+
+        # Default Configurations sweep
+        # num_iterations = 15000
+        # eval_interval = 2000
+        # eval_episodes = 10
+        # network_width = random.choice([64, 128, 258])
+        # network_depth = random.choice([2, 4])
+        # batch_size = random.choice([16, 32, 64, 128, 256, 512])
+        # num_counter_examples = random.choice([4, 8, 16])
+        # learning_rate = random.choice([1.e-1, 1.e-2, 1.e-3, 1.e-4, 1.e-5])
+        # num_action_samples = random.choice([128, 256, 512, 1024])
+        # langevin_iteration = random.choice([50, 100, 250, 500])
+        # langevin_stepsize = random.choice([1.e-4, 1.e-5, 1.e-6, 1.e-7])
+        # decay_steps = random.choice([50, 100, 250, 500])
+        # decay_rate = random.choice([0.8, 0.95, 0.99])
+
+        # Configurations tuning sweep
+        # num_iterations = 15000  # random.choice([50000])
+        # eval_interval = 2000
+        # eval_episodes = 10
+        # network_width = 190 + (10 * random.randint(-10, 10))               #random.choice([128, 200, 256, 300, 512])
+        # network_depth = 2 + (2 * random.randint(1, 5))
+        # batch_size = 64 + (10 * random.randint(-5, 5))                     #random.choice([64, 80, 128, 150, 256])
+        # num_counter_examples = 4  + random.randint(0, 5)           #random.choice([4, 6, 8, 10])
+        # learning_rate = random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])  # 1e-2             #random.choice([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
+        # num_action_samples = 1024 + (10 * random.randint(-100, 100))             #random.choice([64, 128, 256, 512, 1024])
+        # langevin_iteration = 60 + (10 * random.randint(-5, 5))            #random.choice([50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
+        # langevin_stepsize = random.choice([1e-9, 1e-10, 1e-11, 1e-12, 1e-13])  #1e-11           #random.choice([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8])            # Final langevin stepsizes
+        # decay_steps = 80 + (10 * random.randint(-5, 500))                    #random.choice([100, 200, 300, 400, 500])
+        # decay_rate = random.uniform(0.8, 0.99)  #              #random.choice([0.8, 0.95, 0.99]) #0.99
 
         # # start a new wandb run to track this script
         wandb.init(
@@ -267,6 +334,7 @@ def main(_):
                 'eval_interval': eval_interval,
                 'eval_episodes': eval_episodes,
                 'network_width': network_width,
+                'network_depth': network_depth,
                 'batch_size': batch_size,
                 'num_counter_examples': num_counter_examples,
                 'learning_rate': learning_rate,

@@ -58,6 +58,7 @@ def create_episodes(dataset_path, num_episodes, index):
     policy = MT_SutureOracle(env)
     env.set_video_title(f'demo_videos/Suture_demo_{index}')
     env.set_csv_file(f'csv_files/suture_throw_demo_{index}.csv')
+    #env.set_tf_name(f'vision_{index}.tfrecords')
     env.set_mode_demo()
 
     observers = []
@@ -71,10 +72,11 @@ def create_episodes(dataset_path, num_episodes, index):
     
     env.close()
 
+
 def main(_):
     num_episodes = 1
-    for i in range(1, 2):
-        dataset_path = f'FULL_PIPELINE_DATA/suture_throw_demo_{i}.tfrecord'
+    for i in [29]: #range(25, 50):
+        dataset_path = f'Trainings_Data/AUTOENCODER_DATASET/suture_throw_demo_{i}.tfrecord'
         create_episodes(dataset_path, num_episodes, i)
 
 if __name__ == "__main__":

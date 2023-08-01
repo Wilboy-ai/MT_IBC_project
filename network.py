@@ -129,8 +129,6 @@ def preprocess(images, target_height, target_width):
   return images
 
 
-
-
 def get_encoder_network(encoder_network, target_height, target_width, channels):
     return get_conv_maxpool(target_height, target_width, channels)
 
@@ -269,11 +267,10 @@ def make_mlp_ebm(obs_spec, action_spec, depth=2, width=256, name='MLPEBM'):
 #     return model
 
 
-
-def get_energy_model(obs_tensor_spec, action_tensor_spec, network_width):
+def get_energy_model(obs_tensor_spec, action_tensor_spec, network_depth, network_width):
     """Create MLP for simple features."""
     energy_model = MLPEBM(obs_spec=(obs_tensor_spec, action_tensor_spec), action_spec=tf.TensorSpec([1]),
-                          width=network_width)
+                          depth=network_depth, width=network_width)
 
     #energy_model = make_mlp_ebm(obs_spec=(obs_tensor_spec, action_tensor_spec), action_spec=tf.TensorSpec([1]),
     #                      width=network_width)

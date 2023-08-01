@@ -77,16 +77,19 @@ def train():
     logging.set_verbosity(logging.INFO)
 
     tf.random.set_seed(0)
-    root_dir = f'right_domain_eval/'
-    dataset_path = 'LEVEL_3/suture_throw_demo_*.tfrecord'
+    root_dir = f'EVAL_TEST/'
+    dataset_path = 'Trainings_Data/LEVEL_3/suture_throw_demo_*.tfrecord'
 
     # make video folder
     save_video_path = f'{root_dir}Videos'
-    os.makedirs(save_video_path)
-    print(f'Running: {root_dir}')
+    # Make root folder if it doesn't exist
+    if not os.path.exists(save_video_path):
+        os.makedirs(save_video_path)
+        print(f'Running: {root_dir}')
 
-    # Configurations
+    # Optimal Configurations
     network_width = 190
+    network_depth = 2
     batch_size = 64
     num_counter_examples = 4
     learning_rate = 1e-2
@@ -140,7 +143,7 @@ def train():
                                                  uniform_boundary_buffer=0.05)
 
         # Create MLP (= probabilistically modelled energy function)
-        energy_model = get_energy_model(obs_tensor_spec, action_tensor_spec, network_width)
+        energy_model = get_energy_model(obs_tensor_spec, action_tensor_spec, network_depth, network_width)
 
         # Wrapper which contains the training process
         agent = ImplicitBCAgent(time_step_spec=time_step_tensor_spec, action_spec=action_tensor_spec,
@@ -185,7 +188,7 @@ def train():
         # aggregated_summary_dir = os.path.join(root_dir, 'eval')
         # summary_writer = tf.summary.create_file_writer(aggregated_summary_dir, flush_millis=10000)
 
-    eval_episodes = 50
+    eval_episodes = 1 #50
     print(f'Step starting at: {train_step.numpy()}')
     eval_env.set_video_title(f'{save_video_path}/Suture_eval_videos')
     eval_env.set_csv_file(f'{root_dir}Suture_eval.csv')

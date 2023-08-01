@@ -95,7 +95,6 @@ class ImageSaver:
                 print("Right image")
             rospy.sleep(0.01)
 
-
         if type == 'stereo':
             # Resize the left and right images to 960x540
             resized_left = cv2.resize(self.left_frame, (960, 540))
@@ -103,12 +102,19 @@ class ImageSaver:
 
             # Combine the left and right images horizontally
             combined_img = np.concatenate((resized_left, resized_right), axis=1)
+
             #resized_combined_img = cv2.resize(combined_img, (135, 480))
             #gray_img = cv2.cvtColor(resized_combined_img, cv2.COLOR_BGR2GRAY)
             # Normalize the image
             #normalized_img = gray_img.astype('float32') / 255.0
             #combined_img = combined_img.astype('float32')/255.0
+
             return combined_img
+        elif type == 'mono_left':
+            return self.left_frame
+        elif type == 'mono_right':
+            return self.right_frame
+
         #else:
             #resized_right = cv2.resize(self.right_frame, (120, 68))
             #gray_img = cv2.cvtColor(resized_right, cv2.COLOR_BGR2GRAY)

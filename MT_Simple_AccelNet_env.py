@@ -14,11 +14,11 @@ from tf_agents.trajectories import time_step as ts
 from tf_agents.specs import BoundedArraySpec
 from MT_RosAmbfCommChannel import RosAmbfCommChannel
 import time
-import datetime
 import random
 from tf_agents.metrics import py_metrics
 from tf_agents.utils import nest_utils
 import csv
+import datetime
 
 np.set_printoptions(precision=32)
 
@@ -45,7 +45,10 @@ class SurgicalEnv(gym.Env):
         self.mode = "TRAIN"
 
         self.csv_file = f'csv_files/unknown.csv'
+        self.tf_file_name = f'unknown.tfrecords'
 
+        self.tf_images = []
+        self.tf_needle_poses = []
 
         # Define the action space
         self.n_dim = 7
@@ -54,15 +57,22 @@ class SurgicalEnv(gym.Env):
         print("reset called from SurgicalEnv init (MT)")
         self.reset()
     def _create_observation_space(self):
+        # obs_dict = collections.OrderedDict(
+        #     #psm1=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
+        #     psm2=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
+        #     needle=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
+        #     #needle=spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32),
+        #     #entry=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
+        #     entry=spaces.Box(low=1, high=4, shape=(1,), dtype=np.float32),
+        #     #entry=spaces.Box(low=2, high=3, shape=(1,), dtype=np.float32),
+        #     #image=spaces.Box(low=0.0, high=1.0, shape=(64800,), dtype=np.float32) #777600 # stereo image
+        #     #image=spaces.Box(low=0.0, high=255.0, shape=(68, 120, 3), dtype=np.float32) # Mono image pixelEBM
+        # )
+
         obs_dict = collections.OrderedDict(
-            #psm1=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
-            psm2=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
-            needle=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
-            #entry=spaces.Box(low=-1.0, high=1.0, shape=(self.n_dim,), dtype=np.float32),
-            entry=spaces.Box(low=1, high=4, shape=(1,), dtype=np.float32),
-            #image=spaces.Box(low=0.0, high=1.0, shape=(64800,), dtype=np.float32) #777600 # stereo image
-            #image=spaces.Box(low=0.0, high=255.0, shape=(68, 120, 3), dtype=np.float32) # Mono image pixelEBM
+            state=spaces.Box(low=-200.0, high=200.0, shape=(12,), dtype=np.float32),
         )
+
         return spaces.Dict(obs_dict)
 
     def seed(self, seed=None):
@@ -76,7 +86,6 @@ class SurgicalEnv(gym.Env):
 
     def set_csv_file(self, title):
         self.csv_file = title
-
 
     def test(self):
         print("this is a test!")
@@ -93,6 +102,52 @@ class SurgicalEnv(gym.Env):
                                 minimum=self.action_space.low,
                                 maximum=self.action_space.high,
                                 name='action')
+
+    def update_vision_data(self):
+        image, needle_pose = self._comm_channel.get_vision_data()
+        self.tf_images.append(image)
+        self.tf_needle_poses.append(needle_pose)
+
+    def save_vision_data(self):
+        for i, image in enumerate(self.tf_images):
+            cv2.imwrite(f"Trainings_Data/vision_trainings_data/image_test_{i}.jpg", image)
+
+        # open the file in the write mode
+        with open("Trainings_Data/vision_trainings_data/needle_pose_test.csv", 'a') as f:
+            # create the csv writer
+            writer = csv.writer(f)
+            for pose in self.tf_needle_poses:
+                # write a pose as a row to the csv file
+                writer.writerow(pose)
+        # reset tf data
+        self.tf_needle_poses = []
+        self.tf_images = []
+
+    #def set_tf_name(self, file_name):
+    #    self.tf_file_name = file_name
+
+    def save_vision_tfrecord(self):
+        print(f'Saving {len(self.tf_images)}, {len(self.tf_needle_poses)}')
+        # datetime object containing current date and time
+        now = datetime.datetime.now()
+        # dd/mm/YY H:M:S
+        dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
+
+        with tf.io.TFRecordWriter(f"Trainings_Data/vision_trainings_data/vision_{dt_string}.tfrecords") as writer:
+            for image, needle_pose in zip(self.tf_images, self.tf_needle_poses):
+                # Convert the image to bytes
+                img_bytes = cv2.imencode('.jpg', image)[1].tobytes()
+                #img_bytes = tf.io.encode_jpeg(image).numpy()
+                pose_data = needle_pose
+                example = tf.train.Example(features=tf.train.Features(feature={
+                    'image': tf.train.Feature(bytes_list=tf.train.BytesList(value=[img_bytes])),
+                    'pose': tf.train.Feature(float_list=tf.train.FloatList(value=pose_data))
+                }))
+                serialized_example = example.SerializeToString()
+                writer.write(serialized_example)
+        print(f"Saved tfrecords")
+
+
     def reset(self):
         print(f'Total reward: {self._total_reward}')
         print(f"Reset was called")
@@ -102,6 +157,8 @@ class SurgicalEnv(gym.Env):
         #self.set_target_entry(3)
         self.steps = 0
 
+        self.tf_images = []
+        self.tf_needle_poses = []
 
         self.needle_entry_dist = 999
         #self.optimal_action_error = 0
@@ -130,6 +187,10 @@ class SurgicalEnv(gym.Env):
         self._total_reward += reward
         info = {}
 
+        # Add image and needle pose for tf records
+        self.update_vision_data()
+
+
         if self._video:  # Add frame # TODO: Try and fix video framerate
             self._add_frame()
 
@@ -137,11 +198,13 @@ class SurgicalEnv(gym.Env):
         if self._video and self.done:
             self._create_video()
 
+            #self.save_vision_tfrecord()
+            #self.save_vision_data()
+
         # Update Metrics after every high level action
         if not self.done:
             self._comm_channel._update_metrics()
             self.update_metrics()
-
 
         # open the file in the write mode
         with open(self.csv_file, 'a') as f:
@@ -171,7 +234,6 @@ class SurgicalEnv(gym.Env):
         image = self._comm_channel.get_video_feed()
         self._frames.append(image)
 
-
     def set_mode_demo(self):
         self.mode = "DEMO"
 
@@ -196,7 +258,6 @@ class SurgicalEnv(gym.Env):
         self._frames = [] # Reset frame buffer
 
         print(f"Video created: {filename}")
-
 
 class AverageNeedleEntryDistance(py_metrics.StreamingMetric):
     def __init__(self, env, name='AverageNeedleEntryDistance', buffer_size=3, batch_size=None):

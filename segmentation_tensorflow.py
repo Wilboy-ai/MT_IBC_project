@@ -15,10 +15,19 @@ import threading
 #     tf.config.experimental.set_memory_growth(gpu, True)
 
 
+# # Label colors, BGR format
+# CLASS_COLORS = np.array([
+#     (0, 0, 0),      # background (black)
+#     (0, 255, 0),    # tool wrist/gripper (green)
+#     (0, 0, 255),    # needle (red)
+#     (255, 0, 0),    # tool shaft (blue)
+#     (0, 255, 255),  # thread (yellow)
+# ], dtype=np.uint8)
+
 # Label colors, BGR format
 CLASS_COLORS = np.array([
     (0, 0, 0),      # background (black)
-    (0, 255, 0),    # tool wrist/gripper (green)
+    (255, 0, 0),    # tool wrist/gripper (green)
     (0, 0, 255),    # needle (red)
     (255, 0, 0),    # tool shaft (blue)
     (0, 255, 255),  # thread (yellow)

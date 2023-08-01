@@ -30,6 +30,7 @@ from ambf_client import Client
 import collections
 from gym import spaces
 import time
+from datetime import datetime
 import subprocess
 import sys
 import csv
@@ -350,7 +351,6 @@ class WorldInterface:
         self._reset_bodies_pub.publish(Empty())
 
 
-
 class RosAmbfCommChannel(object):
     """ RosAmbfCommChannel:
         Wrapper that provides a communication channel between
@@ -360,7 +360,7 @@ class RosAmbfCommChannel(object):
     def __init__(self):  # TODO: could use a clean up
         self.SM_STATE = "GOTO_NEEDLE"
         self.saver = ImgSaver.ImageSaver()
-        self.vision_method = GetEstimation.estimation("regression")
+        self.vision_method = GetEstimation.estimation("AE")
         # Create an instance of the client
         rospy.init_node('RosAmbfCC')
         time.sleep(0.5)
@@ -755,41 +755,71 @@ class RosAmbfCommChannel(object):
         cp_2 = self.psm2.measured_jp().pose
         pos_psm2 = [cp_2.position.x, cp_2.position.y, cp_2.position.z, cp_2.orientation.x, cp_2.orientation.y, cp_2.orientation.z, cp_2.orientation.w]
 
-        # Stereo image from ecm
-        image = self.saver.save_image_data('stereo')
-
         # Needle pose
         needle = self.scene.measured_cp(SceneObjectType.Needle).pose
         pos_needle = [needle.position.x, needle.position.y, needle.position.z, needle.orientation.x, needle.orientation.y, needle.orientation.z, needle.orientation.w]
+
         # TODO: implement vision pipeline interface
-        pos_needle_EST = self.vision_method.getEstimation(image)
-        print(f"{pos_needle} vs. {pos_needle_EST}")
+        # get image data
+        #image = self.saver.save_image_data('mono_left')
+        #pos_needle_EST = self.vision_method.getEstimation(image, "regression")
+        #reduced_pos_needle_EST = pos_needle_EST[:3]
+        #Needle_est_error = np.array(pos_needle) - np.array(pos_needle_EST)
+
+        #print(f'Error: xyz {np.linalg.norm(Needle_est_error[:3])}, quat {sum(abs(Needle_est_error[3:7]))}') # TODO: calculate the quat rot error
+        #print(f"{pos_needle} vs. {pos_needle_EST} vs. {Needle_est_error} ")
+        #print(f" {pos_needle} vs. {pos_needle_EST}")
+
+        # open the file in the write mode
+        # with open("csv_files/NeedleError.csv", 'a') as f:
+        #     # datetime object containing current date and time
+        #     now = datetime.now()
+        #     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        #     # create the csv writer
+        #     writer = csv.writer(f)
+        #     # Add the data in row
+        #     row = [dt_string, pos_needle, pos_needle_EST, Needle_est_error]
+        #     # write a row to the csv file
+        #     writer.writerow(row)
 
         # add noise to needle
-        #noisy_pos_needle = np.array(pos_needle, dtype=np.float32)
+        noisy_pos_needle = np.array(pos_needle, dtype=np.float32)
         #print(f'Before noise: {noisy_pos_needle}')
-        #mu, sigma = 0, 0.001  # mean and standard deviation
-        #noise = np.random.normal(mu, sigma, 7)
-        #noisy_pos_needle = noisy_pos_needle + noise
+        mu, sigma = 0, 0.001  # mean and standard deviation
+        noise = np.random.normal(mu, sigma, 7)
+        noisy_pos_needle = noisy_pos_needle + noise
         #print(f'After noise: {noisy_pos_needle}')
 
         # Get target entry point
         pos_entry_target = self.pos_entry
         pos_entry_target_number = [self.pos_entry_target_number]
 
+        # state = {
+        #     #'psm1': np.array(pos_psm1, dtype=np.float32),
+        #     'psm2': np.array(pos_psm2, dtype=np.float32),
+        #     #'needle': np.array(pos_needle, dtype=np.float32),              # Simulator needle pose
+        #     #'needle': np.array(pos_needle_EST, dtype=np.float32),          # Estimated needle pose
+        #     #'needle': np.array(reduced_pos_needle_EST, dtype=np.float32),           # Reduced needle pose
+        #     'needle': noisy_pos_needle, # Artificial noisy data
+        #     #'entry': np.array(pos_entry_target, dtype=np.float32),
+        #     'entry': np.array(pos_entry_target_number, dtype=np.float32)
+        #     #'image': np.array(image, dtype=np.float32)
+        # }
 
+        image = self.saver.save_image_data('mono_left')
+        state_vector = self.vision_method.getEstimation(image, "AE")
+        state = {'state': np.array(state_vector, dtype=np.float32)}
 
-        state = {
-            #'psm1': np.array(pos_psm1, dtype=np.float32),
-            'psm2': np.array(pos_psm2, dtype=np.float32),
-            'needle': np.array(pos_needle, dtype=np.float32),
-            #'needle': noisy_pos_needle, # Artificial noisy data
-            #'entry': np.array(pos_entry_target, dtype=np.float32),
-            'entry': np.array(pos_entry_target_number, dtype=np.float32)
-            #'image': np.array(image, dtype=np.float32)
-
-        }
         return state
+
+    def get_vision_data(self):
+        # get image data
+        image = self.saver.save_image_data('mono_left')
+        # Needle pose
+        needle = self.scene.measured_cp(SceneObjectType.Needle).pose
+        pos_needle = [needle.position.x, needle.position.y, needle.position.z, needle.orientation.x,
+                      needle.orientation.y, needle.orientation.z, needle.orientation.w]
+        return image, pos_needle
 
     def get_video_feed(self):
         # Stereo image from ecm
