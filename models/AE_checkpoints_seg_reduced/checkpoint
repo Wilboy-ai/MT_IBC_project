@@ -1,0 +1,2 @@
+model_checkpoint_path: "AE_model_ckp"
+all_model_checkpoint_paths: "AE_model_ckp"
